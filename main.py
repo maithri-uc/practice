@@ -316,7 +316,6 @@ class UnstructuredHtmlToStructuredHtml:
                                     if tag_of_h4.name=="h2":
                                         div_tag_for_chapter.append(div_tag_for_section)
                                         self.soup.main.append(div_tag_for_chapter)
-                                        self.write_to_file()
                                         div_tag_for_section=self.soup.new_tag("div")
                                         div_tag_for_chapter=self.soup.new_tag("div")
                                 elif tag_of_h4.name == "nav":
