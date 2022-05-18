@@ -330,7 +330,10 @@ class UnstructuredHtmlToStructuredHtml:
 
                                 else:
                                     next_tag = tag_of_h4.find_next_sibling()
-                                    div_tag_for_h4.append(tag_of_h4)
+                                    if div_tag_for_h4.next_element:
+                                        div_tag_for_h4.append(tag_of_h4)
+                                    else:
+                                        div_tag_for_section.append(tag_of_h4)
                                     tag_of_h4 = next_tag
                             if div_tag_for_h4.next_element :
                                 div_tag_for_section.append(div_tag_for_h4)
