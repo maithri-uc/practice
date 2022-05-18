@@ -297,13 +297,18 @@ class UnstructuredHtmlToStructuredHtml:
                                     while tag_of_h5.name!="h5" and tag_of_h5.name!="h3":
                                         if tag_of_h5.next_element.name=="br":
                                             next_tag = tag_of_h5.find_next_sibling()
-                                            div_tag_for_h4.append(tag_of_h5)
+                                            div_tag_for_h4.append(div_tag_for_h5)
+                                            div_tag_for_h5=self.soup.new_tag("div")
+                                            div_tag_for_section.append(div_tag_for_h4)
+                                            div_tag_for_h4=self.soup.new_tag("div")
+                                            div_tag_for_section.append(tag_of_h5)
                                             tag_of_h5 = next_tag
                                         else:
                                             next_tag = tag_of_h5.find_next_sibling()
                                             div_tag_for_h5.append(tag_of_h5)
                                             tag_of_h5=next_tag
-                                    div_tag_for_h4.append(div_tag_for_h5)
+                                    if div_tag_for_h5.next_element:
+                                        div_tag_for_h4.append(div_tag_for_h5)
                                     div_tag_for_h5=self.soup.new_tag("div")
                                     tag_of_h4=tag_of_h5
 
