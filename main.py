@@ -44,6 +44,8 @@ class UnstructuredHtmlToStructuredHtml:
                         sub_section_id = re.sub(r'[^a-zA-Z0-9]', '', tag.text).lower()
                         tag.attrs['id'] = tag.find_previous_sibling("h3").attrs['id'] + '-' + sub_section_id
                         if expression=='NOTES TO DECISIONS':
+                            h5_tag = tag.find_next_sibling()
+                            h5_tag.name = "h5"
                             for sub_tag in tag.find_next_siblings():
                                 if sub_tag.next_element.name=="br" :
                                       continue
@@ -303,6 +305,12 @@ class UnstructuredHtmlToStructuredHtml:
                                             div_tag_for_h4=self.soup.new_tag("div")
                                             div_tag_for_section.append(tag_of_h5)
                                             tag_of_h5 = next_tag
+                                        elif tag_of_h5.name=="h4":
+                                            div_tag_for_h4.append(div_tag_for_h5)
+                                            div_tag_for_h5 = self.soup.new_tag("div")
+                                            div_tag_for_section.append(div_tag_for_h4)
+                                            div_tag_for_h4 = self.soup.new_tag("div")
+                                            break
                                         else:
                                             next_tag = tag_of_h5.find_next_sibling()
                                             div_tag_for_h5.append(tag_of_h5)
