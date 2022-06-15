@@ -283,10 +283,16 @@ class UnstructuredHtmlToStructuredHtml:
     def add_citation(self):
         for tag in self.soup.find_all(["p", "li"]):
             tag_string = ''
-            if re.search('Defendant could be held liable for operating a motor vehicle',tag.text):
-                print()
-            if re.search('(\d+-\d+(-\d+)?(\.\d+(-\d+)?(\.\d+)?)?)', tag.text.strip()) and tag.attrs['class']!="nav_li":
-                for pattern in sorted(set(match[0] for match in re.findall('(\d+-\d+(-\d+)?(\.\d+(-\d+)?(\.\d+)?)?)', tag.text.strip()))):
+            cite_tag_pattern={'pattern':'\d+-\d+(-\d+)?(\.\d+(-\d+)?(\.\d+)?)?',
+                              'alr_pattern':'\d+ A.(L.R.)?( Fed. )?(\d[a-z]{1,2})?( Art.)? ?\d+',
+                              'pl_gl_pattern':'(impl\. am\. )?[PG]\.L\. \d+',
+                              'us_ammend':'U\.S\. Const\., Amend\. (\d+|(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})\.)( C)?',
+                              'sl_ct':'\d+ [SL]\. (Ct|Ed)\. (\d[a-z] )?\d+',
+                              'ann_laws':'Ann\. Laws ch\. \d+','ri_ui':'\d+ [RU]\.[IS]\. (LEXIS )?\d+',
+                              'a_2d':'\d+ A\.2d \d+',
+                              'roger':'\d+ R(\.|oger )W(\.|illiams )U\.L\. Rev. \d+'}
+            if re.search(cite_tag_pattern['pattern'], tag.text.strip()) and tag.attrs['class']!="nav_li":
+                for pattern in sorted(set(match[0] for match in re.findall('('+cite_tag_pattern['pattern']+')', tag.text.strip()))):
                     if re.search('\d+-\d+-\d+\.\d+',pattern):
                         section_match = re.search("(?P<title_id>\d+)-(?P<chapter_id>\d+)(-\d+)?(\.\d+(-\d+)?(\.\d+)?)?",pattern)
                         tag_id=f"t{section_match.group('title_id').zfill(2)}c{section_match.group('chapter_id').zfill(2)}s{section_match.group()}"
@@ -308,41 +314,56 @@ class UnstructuredHtmlToStructuredHtml:
                         tag.clear()
                         tag.string = tag_string
 
-            if re.search('\d+ A.(L.R.)?( Fed. )?(\d[a-z]{1,2})?( Art.)? ?\d+', tag.text.strip())  and tag.attrs['class']!="nav_li":
-                for alr_pattern in set(match[0] for match in re.findall('(\d+ A.(L.R.)?( Fed. )?(\d[a-z]{1,2})?( Art.)? ?\d+)', tag.text.strip())):
-                    if re.search(alr_pattern, tag.text):
-                        cite_tag = self.soup.new_tag("cite")
-                        text_string = re.search(alr_pattern, tag.text).group()
-                        cite_tag.string = text_string
-                        text = tag.text
-                        tag_string = re.sub(text_string, f"<cite>{alr_pattern}</cite>", text)
-                        tag.clear()
-                        tag.string = tag_string
-
-            if re.search('[PG]\.L\. \d+', tag.text.strip()) and tag.attrs['class']!="nav_li":
-                for pl_pattern in set(match for match in re.findall('([PG]\.L\. \d+)', tag.text.strip())):
-                    text_string = re.search(pl_pattern, tag.text).group()
+            if re.search(cite_tag_pattern['alr_pattern'], tag.text.strip())  and tag.attrs['class']!="nav_li":
+                for cite_pattern in set(match[0] for match in re.findall('('+cite_tag_pattern['alr_pattern']+')', tag.text.strip())):
                     text = tag.text
-                    tag_string = re.sub(text_string, f"<cite>{pl_pattern}</cite>", text)
+                    tag_string = re.sub(cite_pattern, f"<cite>{cite_pattern}</cite>", text)
                     tag.clear()
                     tag.string = tag_string
 
-            if re.search('\d+ R\.I\. (LEXIS )?\d+',tag.text.strip())and tag.attrs['class']!="nav_li":
-                for rl_pattern in set(match[0] for match in re.findall('(\d+ R\.I\. (LEXIS )?\d+)', tag.text.strip())):
-                    text_string = re.search(rl_pattern, tag.text).group()
+            if re.search(cite_tag_pattern['pl_gl_pattern'], tag.text.strip()) and tag.attrs['class']!="nav_li":
+                for cite_pattern in set(match[0] for match in re.findall('('+cite_tag_pattern['pl_gl_pattern']+')', tag.text.strip())):
                     text = tag.text
-                    tag_string = re.sub(text_string, f"<cite>{rl_pattern}</cite>", text)
+                    tag_string = re.sub(cite_pattern, f"<cite>{cite_pattern}</cite>", text)
+                    tag.clear()
+                    tag.string = tag_string
+            if re.search(cite_tag_pattern['us_ammend'], tag.text.strip()) and tag.attrs['class']!="nav_li":
+                for cite_pattern in set(match[0] for match in re.findall('('+cite_tag_pattern['us_ammend']+')', tag.text.strip())):
+                    text = tag.text
+                    tag_string = re.sub(cite_pattern, f"<cite>{cite_pattern}</cite>", text)
+                    tag.clear()
+                    tag.string = tag_string
+            if re.search(cite_tag_pattern['sl_ct'],tag.text.strip())and tag.attrs['class']!="nav_li":
+                for cite_pattern in set(match[0] for match in re.findall('('+cite_tag_pattern['sl_ct']+')', tag.text.strip())):
+                    text = tag.text
+                    tag_string = re.sub(cite_pattern, f"<cite>{cite_pattern}</cite>", text)
+                    tag.clear()
+                    tag.string = tag_string
+            if re.search(cite_tag_pattern['ann_laws'],tag.text.strip())and tag.attrs['class']!="nav_li":
+                for cite_pattern in set(match for match in re.findall(cite_tag_pattern['ann_laws'], tag.text.strip())):
+                    text = tag.text
+                    tag_string = re.sub(cite_pattern, f"<cite>{cite_pattern}</cite>", text)
+                    tag.clear()
+                    tag.string = tag_string
+            if re.search(cite_tag_pattern['ri_ui'],tag.text.strip())and tag.attrs['class']!="nav_li":
+                for cite_pattern in set(match[0] for match in re.findall('('+cite_tag_pattern['ri_ui']+')', tag.text.strip())):
+                    text = tag.text
+                    tag_string = re.sub(cite_pattern, f"<cite>{cite_pattern}</cite>", text)
                     tag.clear()
                     tag.string = tag_string
 
-            if re.search('\d+ A\.2d \d+',tag.text.strip())and tag.attrs['class']!="nav_li":
-                for a2d_pattern in set(match for match in re.findall('\d+ A\.2d \d+', tag.text.strip())):
-                    text_string = re.search(a2d_pattern, tag.text).group()
+            if re.search(cite_tag_pattern['a_2d'],tag.text.strip())and tag.attrs['class']!="nav_li":
+                for cite_pattern in set(match for match in re.findall(cite_tag_pattern['a_2d'], tag.text.strip())):
                     text = tag.text
-                    tag_string = re.sub(text_string, f"<cite>{a2d_pattern}</cite>", text)
+                    tag_string = re.sub(cite_pattern, f"<cite>{cite_pattern}</cite>", text)
                     tag.clear()
                     tag.string = tag_string
-
+            if re.search(cite_tag_pattern['roger'],tag.text.strip())and tag.attrs['class']!="nav_li":
+                for cite_pattern in set(match[0] for match in re.findall('('+cite_tag_pattern['roger']+')', tag.text.strip())):
+                    text = tag.text
+                    tag_string = re.sub(cite_pattern, f"<cite>{cite_pattern}</cite>", text)
+                    tag.clear()
+                    tag.string = tag_string
             if tag_string:
                 tag.clear()
                 tag.append(BeautifulSoup(tag_string, features="html.parser"))
@@ -375,6 +396,8 @@ class UnstructuredHtmlToStructuredHtml:
                     if next_sibling and re.search('^ARTICLE (XC|XL|L?X{0,3})(IX|IV|V?I{0,3})',next_sibling.text.strip()):
                         ol_count=1
                     continue
+                if tag.i:
+                    tag.i.unwrap()
                 next_tag = tag.find_next_sibling()
                 if next_tag is None:#last tag
                     break
@@ -1212,10 +1235,10 @@ class UnstructuredHtmlToStructuredHtml:
         head_tag.append(link_tag)
 
     def write_to_file(self):
-        file_write = open("/home/mis/PycharmProjects/practice/venv/ricode/modified/gov.ri.code.title.03.html", "w")
+        file_write = open("/home/mis/PycharmProjects/practice/venv/ricode/modified/gov.ri.code.title.02.html", "w")
         file_write.write(self.soup.prettify())
 
-html_file = "/home/mis/PycharmProjects/practice/venv/ricode/raw/gov.ri.code.title.03.html"
+html_file = "/home/mis/PycharmProjects/practice/venv/ricode/raw/gov.ri.code.title.02.html"
 unstructured_to_structured_html = UnstructuredHtmlToStructuredHtml(html_file)
 unstructured_to_structured_html.get_class_name()
 unstructured_to_structured_html.remove_junk()
