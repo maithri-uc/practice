@@ -130,10 +130,6 @@ class UnstructuredHtmlToStructuredHtml:
                                 sub_tag.attrs['class'] = 'notes_section'
                         elif re.search('^\d+-\d+(-\d+)?(\.\d+(-\d+)?(\.\d+)?)?', sub_tag.text) or re.search('Collateral References\.', sub_tag.text) or re.search('^Part \d{1,2}',sub_tag.text) or re.search('^Chapters? \d+(.\d+)?', sub_tag.text):
                             break
-            elif class_name == self.dictionary_to_store_class_name['li']:
-                if re.search("^Chapters? \d+(.\d+)?", tag.text.strip()) or re.search("^\d+-\d+(-\d+)?(\.\d+(-\d+)?(\.\d+)?)?", tag.text.strip()) or re.search('^Part \d{1,2}',tag.text.strip()):
-                    tag.name = "li"
-                    tag['class'] = "nav_li"
             elif class_name == self.dictionary_to_store_class_name['History']:
                 if re.search("^History of Section\.", tag.text):
                     h4_tag = self.soup.new_tag("h4")
@@ -141,7 +137,7 @@ class UnstructuredHtmlToStructuredHtml:
                     tag.insert_before(h4_tag)
                     tag.string = re.sub('History of Section.', '', tag.text)
                     sub_section_id = re.sub(r'[^a-zA-Z0-9]', '', h4_tag.text).lower()
-                    if h4_tag.find_previous_sibling().attrs['class'][0] == self.dictionary_to_store_class_name['li']:  # history of section
+                    if h4_tag.find_previous_sibling().attrs['class'] == "nav_li":  # history of section
                         h4_tag.attrs['id'] = f"{h4_tag.find_previous_sibling('h2').attrs['id']}-{sub_section_id}"
                     else:
                         h4_tag.attrs['id'] = f"{h4_tag.find_previous_sibling('h3').attrs['id']}-{sub_section_id}"
@@ -161,6 +157,10 @@ class UnstructuredHtmlToStructuredHtml:
                     p_tag_for_a.attrs['class'] = [self.dictionary_to_store_class_name['History']]
                     p_tag_for_section.attrs['class'] = [self.dictionary_to_store_class_name['History']]
                     tag.decompose()
+            elif class_name == self.dictionary_to_store_class_name['li']:
+                if re.search("^Chapters? \d+(.\d+)?", tag.text.strip()) or re.search("^\d+-\d+(-\d+)?(\.\d+(-\d+)?(\.\d+)?)?", tag.text.strip()) or re.search('^Part \d{1,2}',tag.text.strip()):
+                    tag.name = "li"
+                    tag['class'] = "nav_li"
 
     def create_li_with_anchor(self, li_tag, id, li_type=None, li_count=None):
         li_tag_text = li_tag.text
@@ -319,9 +319,9 @@ class UnstructuredHtmlToStructuredHtml:
                         tag_string = re.sub(cite_pattern, f"<cite>{cite_pattern}</cite>", text)
                         text = tag_string
 
-            if re.search('\d+-\d+(-\d+)?(\.\d+(-\d+)?(\.\d+)?)?', tag.text.strip()) and tag.attrs['class'] != "nav_li":
-                for pattern in sorted(set(match[0] for match in re.findall('(\d+-\d+(-\d+)?(\.\d+(-\d+)?(\.\d+)?)?)', tag.text.strip()))):
-                    section_match = re.search("(?P<title_id>\d+)-(?P<chapter_id>\d+)(-\d+)?(\.\d+(-\d+)?(\.\d+)?)?",pattern)
+            if re.search('\d+-\d+(-\d+)?(\.\d+(-\d+)?(\.\d+)?)?(\([a-z]+\))?(\([0-9]\))?', tag.text.strip()) and tag.attrs['class'] != "nav_li":
+                for pattern in sorted(set(match[0] for match in re.findall('(\d+-\d+(-\d+)?(\.\d+(-\d+)?(\.\d+)?)?(\([a-z]+\))?(\([0-9]\))?)', tag.text.strip()))):
+                    section_match = re.search("(?P<section_id>(?P<title_id>\d+)-(?P<chapter_id>\d+)((-\d+)?(\.\d+(-\d+)?(\.\d+)?)?))(\((?P<li_alpha>[a-z]+)\))?(\((?P<li_num>[0-9])\))?",pattern)
                     file_exists = exists(f'/home/mis/PycharmProjects/practice/venv/ricode/modified/gov.ri.code.title.{section_match.group("title_id").zfill(2)}.html')
                     if file_exists:
                         file=open(f'/home/mis/PycharmProjects/practice/venv/ricode/modified/gov.ri.code.title.{section_match.group("title_id").zfill(2)}.html')
@@ -334,6 +334,14 @@ class UnstructuredHtmlToStructuredHtml:
                             tag_id=re.search(f'id="(?P<tag_id>(.+s{pattern}))"',content).group('tag_id')
                             tag_string = re.sub(pattern, f"<cite><a href=http://localhost:63342/practice/venv/ricode/modified/gov.ri.code.title.{section_match.group('title_id').zfill(2)}.html?_ijt=lartillgujbilc2c7ak6tlmhr8&_ij_reload=RELOAD_ON_SAVE#{tag_id} target='_self'>{pattern}</a></cite>", text)
                             text = tag_string
+                    elif re.search('\d+-\d+-\d+\([a-z]+\)\([0-9]\)',pattern):
+                        alpha_id=section_match.group('li_alpha')
+                        number_id=section_match.group('li_num')
+                        section_id=section_match.group('section_id')
+                        if re.search(f'id=".+s{section_id}ol1{alpha_id}{number_id}"',content):
+                            tag_id=re.search(f'id="(?P<tag_id>(.+s{section_id}ol1{alpha_id}{number_id}))"',content).group('tag_id')
+                            tag_string = re.sub(fr'{re.escape(pattern)}', f"<cite><a href=http://localhost:63342/practice/venv/ricode/modified/gov.ri.code.title.{section_match.group('title_id').zfill(2)}.html?_ijt=lartillgujbilc2c7ak6tlmhr8&_ij_reload=RELOAD_ON_SAVE#{tag_id} target='_self'>{pattern}</a></cite>", text)
+                        text = tag_string
                     else:
                         if re.search('(?<!\.|-)\d+-\d+(?!((\d)?\.\d+)|((\d)?-\d+))', pattern):#12-32
                             chapter_id=section_match.group('chapter_id').zfill(2)
