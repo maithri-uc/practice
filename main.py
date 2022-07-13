@@ -498,9 +498,9 @@ class UnstructuredHtmlToStructuredHtml:
                         tag.attrs['id'] = f"{h3_id}ol{ol_count}{inner_num}{inner_roman}"
                         inner_roman = roman.fromRoman(inner_roman.upper())
                         inner_roman += 1
-                        inner_roman_ = roman.toRoman(inner_roman).lower()
+                        inner_roman = roman.toRoman(inner_roman).lower()
                         ol_tag_for_inner_number.append(li_tag)
-                        number += 1
+                        inner_num += 1
                     elif re.search(f'^\({roman_number}\) \({caps_alpha}\)', tag.text.strip()):
                         tag.name = "li"
                         text = str(tag)
@@ -644,6 +644,7 @@ class UnstructuredHtmlToStructuredHtml:
                             ol_tag_for_roman = self.soup.new_tag("ol", type="i")
                             roman_number = "i"
                     elif re.search(f'^\({alphabet}{alphabet}?\)', tag.text.strip()):
+                        alpha_id=re.search(f'^\((?P<alpha_id>{alphabet}{alphabet}?)\)',tag.text.strip()).group('alpha_id')
                         tag.name = "li"
                         text = str(tag)
                         tag_string = re.sub('^<li[^>]*>(<span.*</span>)?<b>\([a-z]+\)</b>|^<li[^>]*>(<span.*</span>)?\([a-z]+\)|</li>$','', text.strip())
@@ -661,7 +662,7 @@ class UnstructuredHtmlToStructuredHtml:
                                     inner_alphabet = 'a'
                         else:
                             tag.wrap(ol_tag_for_alphabet)
-                            tag.attrs['id'] = f"{h3_id}ol{ol_count}{alphabet}"
+                            tag.attrs['id'] = f"{h3_id}ol{ol_count}{alpha_id}"
                             if alphabet=="z":
                                 alphabet='a'
                             else:
@@ -804,7 +805,7 @@ class UnstructuredHtmlToStructuredHtml:
                             elif ol_tag_for_caps_alphabet.li:
                                 ol_tag_for_caps_alphabet.find_all("li")[-1].append(ol_tag_for_inner_roman)
                                 ol_tag_for_inner_roman = self.soup.new_tag("ol", type="i")
-                                roman_number = 'i'
+                                inner_roman = 'i'
                         elif re.search(f'\({inner_num}\)',next_tag.text.strip()):
                             if ol_tag_for_inner_number.li:
                                 ol_tag_for_inner_number.find_all("li",class_="inner_num")[-1].append(ol_tag_for_inner_roman)
