@@ -7,14 +7,11 @@ class UnstructuredHtmlToStructuredHtml:
     def __init__(self):
         self.html_file = None
         self.soup= None
-        self.dictionary_to_store_part = {}
-        self.list_of_section = []
-        self.part_section=[]
-        self.dictionary_to_store_class_name = {'h1': r'^Title \d+', 'h4': 'Compiler’s Notes\.',
+        self.dictionary_to_store_class_name = {'h1': r'^Title \d+[A-Z]?(\.\d+)?', 'h4': 'Compiler’s Notes\.',
                                                'History': 'History of Section\.',
-                                               'li': r'^Chapters? \d+(.\d+)?',
-                                               'h3': r'^\d+-\d+(-\d+)?(\.\d+(-\d+)?(\.\d+)?)?',
-                                               'h2': r'^Chapters? \d+(.\d+)?',
+                                               'li': r'^Chapters? \d+(.\d+)?(.\d+)?',
+                                               'h3': r'^\d+[A-Z]?-\d+(-\d+)?(\.\d+(-\d+)?(\.\d+)?)?|Chs. \d+  - \d+\.',
+                                               'h2': r'^Chapters? \d+(.\d+)?(.\d+)?',
                                                'junk': 'Text', 'ol_of_i': '\([A-Z a-z]\)'}
 
     def create_soup(self, file_name):
@@ -63,42 +60,46 @@ class UnstructuredHtmlToStructuredHtml:
         list_to_store_regex_for_h4 = ['Compiler’s Notes.', 'Compiler\'s Notes.', 'Cross References.',
                                       'Comparative Legislation.',
                                       'Collateral References.', 'NOTES TO DECISIONS',
-                                      'Repealed Sections.', 'Effective Dates.', 'Law Reviews.', 'Rules of Court.']
+                                      'Repealed Sections.', 'Effective Dates.', 'Law Reviews.', 'Rules of Court.','OFFICIAL COMMENT']
         count_for_duplicate = 0
         for tag in self.soup.find_all("p"):
             class_name = tag['class'][0]
             if class_name == self.dictionary_to_store_class_name['h1']:
                 tag.name = "h1"
-                if re.search("^Title \d+", tag.text.strip()):
-                    title_number = re.search("^Title (?P<title_number>\d+)", tag.text.strip()).group('title_number').zfill(2)
+                if re.search("^Title \d+[A-Z]?(\.\d+)?", tag.text.strip()):
+                    title_number = re.search("^Title (?P<title_number>\d+[A-Z]?)", tag.text.strip()).group('title_number').zfill(2)
                     tag.attrs['id'] = f"t{title_number}"
                 else:
                     raise Exception('Title Not found...')
             elif class_name == self.dictionary_to_store_class_name['h2']:
-                if re.search("^Chapters? \d+(.\d+)?", tag.text.strip()):
+                if re.search("^Chapters? \d+(.\d+)?(.\d+)?", tag.text.strip()):
                     tag.name = "h2"
                     chapter_number = re.search("^Chapters? (?P<chapter_number>\d+(.\d+)?)", tag.text.strip()).group(
                         'chapter_number').zfill(2)
                     tag.attrs['id'] = f"{tag.find_previous_sibling('h1').attrs['id']}c{chapter_number}"
                     tag.attrs['class'] = "chapter"
                 elif re.search("^Part \d{1,2}", tag.text.strip()):
-                    self.list_of_section=[]
                     tag.name = "h2"
                     part_number = re.search("^Part (?P<part_number>\d{1,2})", tag.text.strip()).group('part_number').zfill(2)
                     tag.attrs['id'] = f"{tag.find_previous_sibling('h2', class_='chapter').attrs['id']}p{part_number}"
+                    tag['class']="part"
+                elif re.search('^Subpart [A-Z0-9]',tag.text.strip()):
+                    tag.name = "h2"
+                    sub_part_number = re.search("^Subpart (?P<sub_part_number>[A-Z0-9])", tag.text.strip()).group('sub_part_number')
+                    tag.attrs['id'] = f"{tag.find_previous_sibling('h2', class_='part').attrs['id']}sp{sub_part_number}"
                 else:
+                    print(tag)
                     raise Exception('header2 pattern Not found...')
             elif class_name == self.dictionary_to_store_class_name['h3']:
                 tag.name = "h3"
                 tag['class'] = "section"
-                if re.search("^\d+-\d+(-\d+)?(\.\d+(-\d+)?(\.\d+)?)?", tag.text.strip()):
-                    id_of_section = re.search("^\d+-\d+(-\d+)?(\.\d+(-\d+)?(\.\d+)?)?", tag.text.strip()).group()
+                if re.search("^\d+[A-Z]?-\d+(-\d+)?(\.\d+(-\d+)?(\.\d+)?)?|^Chs. \d+  - \d+\.", tag.text.strip()):
+                    if re.search("^\d+[A-Z]?-\d+(-\d+)?(\.\d+(-\d+)?(\.\d+)?)?", tag.text.strip()):
+                        id_of_section = re.search("^\d+[A-Z]?-\d+(-\d+)?(\.\d+(-\d+)?(\.\d+)?)?", tag.text.strip()).group()
+                    else:
+                        match=re.search("^Chs. (?P<section_id>\d+  - \d+)\.", tag.text.strip()).group('section_id')
+                        id_of_section=re.sub('[^A-Za-z0-9]','',match)
                     section_id = f"{tag.find_previous_sibling('h2').attrs['id']}s{id_of_section}"
-                    if re.search('^Part \d{1,2}',tag.find_previous_sibling('h2').text.strip()):
-                        part_id=re.search('c\d+p\d+',tag.find_previous_sibling('h2').attrs['id']).group()
-                        self.list_of_section.append(id_of_section)
-                        self.part_section.append(id_of_section)
-                        self.dictionary_to_store_part[f"{part_id.zfill(2)}"] = list(set(self.list_of_section))
                     duplicate = self.soup.find_all("h3", id=section_id)
                     if len(duplicate):  # 4-1.1-1
                         count_for_duplicate += 1
@@ -128,9 +129,16 @@ class UnstructuredHtmlToStructuredHtml:
                             if re.search('^—.*', sub_tag.text.strip()):
                                 sub_tag.attrs['id'] = f"{sub_tag.find_previous_sibling('h5', class_='notes_section').attrs['id']}-{sub_tag_id}"
                             else:
-                                sub_tag.attrs['id'] = f"{tag_id}-{sub_tag_id}"
+                                h5_id=f"{tag_id}-{sub_tag_id}"
+                                duplicate = self.soup.find_all("h5", id=h5_id)
+                                if len(duplicate):  # 4-1.1-1
+                                    count_for_duplicate += 1
+                                    sub_tag.attrs['id'] = f"{h5_id}.{str(count_for_duplicate).zfill(2)}"
+                                else:
+                                    count_for_duplicate = 0
+                                    sub_tag.attrs['id'] = f"{h5_id}"
                                 sub_tag.attrs['class'] = 'notes_section'
-                        elif re.search('^\d+-\d+(-\d+)?(\.\d+(-\d+)?(\.\d+)?)?', sub_tag.text.strip()) or re.search('Collateral References\.', sub_tag.text) or re.search('^Part \d{1,2}',sub_tag.text) or re.search('^Chapters? \d+(.\d+)?', sub_tag.text):
+                        elif re.search('^\d+[A-Z]?-\d+(-\d+)?(\.\d+(-\d+)?(\.\d+)?)?|^Chs. \d+  - \d+\.', sub_tag.text.strip()) or re.search('Collateral References\.', sub_tag.text) or re.search('^Part \d{1,2}',sub_tag.text) or re.search('^Chapters? \d+(.\d+)?(.\d+)?', sub_tag.text):
                             break
             elif class_name == self.dictionary_to_store_class_name['History']:
                 if re.search("^History of Section\.", tag.text.strip()):
@@ -160,7 +168,7 @@ class UnstructuredHtmlToStructuredHtml:
                     p_tag_for_section.attrs['class'] = [self.dictionary_to_store_class_name['History']]
                     tag.decompose()
             elif class_name == self.dictionary_to_store_class_name['li']:
-                if re.search("^Chapters? \d+(.\d+)?", tag.text.strip()) or re.search("^\d+-\d+(-\d+)?(\.\d+(-\d+)?(\.\d+)?)?", tag.text.strip()) or re.search('^Part \d{1,2}',tag.text.strip()):
+                if re.search("^Chapters? \d+(.\d+)?(.\d+)?", tag.text.strip()) or re.search("^\d+[A-Z]?-\d+(-\d+)?(\.\d+(-\d+)?(\.\d+)?)?|^Chs. \d+  - \d+\.", tag.text.strip()) or re.search('^Part \d{1,2}',tag.text.strip()) or re.search('^Subpart [A-Z0-9]',tag.text.strip()):
                     tag.name = "li"
                     tag['class'] = "nav_li"
 
@@ -179,77 +187,87 @@ class UnstructuredHtmlToStructuredHtml:
         ul_tag_for_header5 = self.soup.new_tag("ul")
         ul_tag_for_sub_section = self.soup.new_tag("ul")
         ul_tag_for_part = self.soup.new_tag("ul")
+        ul_tag_for_sub_part=self.soup.new_tag("ul")
         li_count_for_chapter = 0
         li_count_for_section = 0
         li_count_for_part = 0
+        li_count_for_sub_part=0
         count_for_duplicate = 0
+        nav_tag_for_sub_part_ul = self.soup.new_tag("nav")
+        nav_tag_for_part_ul = self.soup.new_tag("nav")
+        nav_tag_for_notes_to_decision_ul = self.soup.new_tag("nav")
         for li_tag in self.soup.find_all("li"):
-            if re.search("^Chapters? \d+(.\d+)?", li_tag.text.strip()):
-                if re.search("^Chapters? (?P<chapter_number>\d+(.\d+)?)", li_tag.text.strip()):
-                    chapter_number = re.search("^Chapters? (?P<chapter_number>\d+(.\d+)?)", li_tag.text.strip()).group(
-                        'chapter_number').zfill(2)
-                    h1_id = f"{li_tag.find_previous_sibling('h1').attrs['id']}c{chapter_number}"
-                    li_count_for_chapter += 1
-                    li_tag = self.create_li_with_anchor(li_tag, h1_id, "cnav", li_count_for_chapter)
-                    ul_tag_for_chapter.attrs['class'] = 'leaders'
-                    li_tag.wrap(ul_tag_for_chapter)
-                else:
-                    raise Exception('chapter li pattern not found')
-            elif re.search("^\d+-\d+(-\d+)?(\.\d+(-\d+)?(\.\d+)?)?", li_tag.text.strip()):
+            if re.search("^Chapters? \d+(.\d+)?(.\d+)?", li_tag.text.strip()):
+                chapter_number = re.search("^Chapters? (?P<chapter_number>\d+(.\d+)?)", li_tag.text.strip()).group('chapter_number').zfill(2)
+                h1_id = f"{li_tag.find_previous_sibling('h1').attrs['id']}c{chapter_number}"
+                li_count_for_chapter += 1
+                li_tag = self.create_li_with_anchor(li_tag, h1_id, "cnav", li_count_for_chapter)
+                ul_tag_for_chapter.attrs['class'] = 'leaders'
+                li_tag.wrap(ul_tag_for_chapter)
+            elif re.search("^\d+[A-Z]?-\d+(-\d+)?(\.\d+(-\d+)?(\.\d+)?)?|^Chs. \d+  - \d+\.", li_tag.text.strip()):
                 nav_tag_for_section_ul = self.soup.new_tag("nav")
-                if re.search("^\d+-\d+(-\d+)?(\.\d+(-\d+)?(\.\d+)?)?", li_tag.text.strip()):
-                    section_id = re.search("^\d+-\d+(-\d+)?(\.\d+(-\d+)?(\.\d+)?)?", li_tag.text.strip()).group()
-                    h3_id = f"{li_tag.find_previous_sibling('h2').attrs['id']}s{section_id}"
-                    duplicate = self.soup.find_all("a", href='#' + h3_id)
-                    if len(duplicate):
-                        count_for_duplicate += 1
-                        id_count = str(count_for_duplicate).zfill(2)
-                        h3_id = f"{h3_id}.{id_count}"
-                    else:
-                        count_for_duplicate = 0
-                    li_count_for_section += 1
-                    li_tag = self.create_li_with_anchor(li_tag, h3_id, "snav", li_count_for_section)
-                    next_tag = li_tag.find_next_sibling()
-                    ul_tag_for_section.attrs['class'] = 'leaders'
-                    if next_tag.name == "h3" or next_tag.name == "h4":
-                        li_tag.wrap(ul_tag_for_section)
-                        ul_tag_for_section.wrap(nav_tag_for_section_ul)
-                        ul_tag_for_section = self.soup.new_tag("ul")
-                        nav_tag_for_section_ul = self.soup.new_tag("nav")
-                        li_count_for_section = 0
-                    else:
-                        li_tag.wrap(ul_tag_for_section)
+                if re.search("^\d+[A-Z]?-\d+(-\d+)?(\.\d+(-\d+)?(\.\d+)?)?",li_tag.text.strip()):
+                    section_id = re.search("^\d+[A-Z]?-\d+(-\d+)?(\.\d+(-\d+)?(\.\d+)?)?",li_tag.text.strip()).group()
                 else:
-                    raise Exception('section li pattern not found')
+                    match =re.search('^Chs. (?P<section_id>\d+  - \d+)\.',li_tag.text.strip()).group('section_id')
+                    section_id=re.sub('[^A-Za-z0-9]','',match)
+                h3_id = f"{li_tag.find_previous_sibling('h2').attrs['id']}s{section_id}"
+                duplicate = self.soup.find_all("a", href='#' + h3_id)
+                if len(duplicate):
+                    count_for_duplicate += 1
+                    id_count = str(count_for_duplicate).zfill(2)
+                    h3_id = f"{h3_id}.{id_count}"
+                else:
+                    count_for_duplicate = 0
+                li_count_for_section += 1
+                li_tag = self.create_li_with_anchor(li_tag, h3_id, "snav", li_count_for_section)
+                next_tag = li_tag.find_next_sibling()
+                ul_tag_for_section.attrs['class'] = 'leaders'
+                if next_tag.name == "h3" or next_tag.name == "h4":
+                    li_tag.wrap(ul_tag_for_section)
+                    ul_tag_for_section.wrap(nav_tag_for_section_ul)
+                    ul_tag_for_section = self.soup.new_tag("ul")
+                    nav_tag_for_section_ul = self.soup.new_tag("nav")
+                    li_count_for_section = 0
+                else:
+                    li_tag.wrap(ul_tag_for_section)
             elif re.search("^Part \d{1,2}", li_tag.text.strip()):
-                nav_tag_for_part_ul = self.soup.new_tag("nav")
-                if re.search("^Part \d{1,2}", li_tag.text.strip()):
-                    part_id = re.search("^Part (?P<part_number>\d{1,2})", li_tag.text.strip()).group('part_number').zfill(2)
-                    h2_id = li_tag.find_previous_sibling('h2').attrs['id']
-                    li_count_for_part += 1
-                    li_tag = self.create_li_with_anchor(li_tag, f"{h2_id}p{part_id}", "snav", li_count_for_part)
-                    next_tag = li_tag.find_next_sibling()
-                    ul_tag_for_part.attrs['class'] = 'leaders'
-                    if next_tag.name == "h2":
-                        li_tag.wrap(ul_tag_for_part)
-                        ul_tag_for_part.wrap(nav_tag_for_part_ul)
-                        ul_tag_for_part = self.soup.new_tag("ul")
-                        nav_tag_for_part_ul = self.soup.new_tag("nav")
-                        li_count_for_part = 0
-                    else:
-                        li_tag.wrap(ul_tag_for_part)
+                part_id = re.search("^Part (?P<part_number>\d{1,2})", li_tag.text.strip()).group('part_number').zfill(2)
+                h2_id = li_tag.find_previous_sibling('h2').attrs['id']
+                li_count_for_part += 1
+                li_tag = self.create_li_with_anchor(li_tag, f"{h2_id}p{part_id}", "snav", li_count_for_part)
+                next_tag = li_tag.find_next_sibling()
+                ul_tag_for_part.attrs['class'] = 'leaders'
+                if next_tag.name == "h2":
+                    li_tag.wrap(ul_tag_for_part)
+                    ul_tag_for_part.wrap(nav_tag_for_part_ul)
+                    ul_tag_for_part = self.soup.new_tag("ul")
+                    nav_tag_for_part_ul = self.soup.new_tag("nav")
+                    li_count_for_part = 0
                 else:
-                    raise Exception('part li pattern not found')
-
+                    li_tag.wrap(ul_tag_for_part)
+            elif re.search('^Subpart [A-Z0-9]',li_tag.text.strip()):
+                sub_part_id = re.search("^Subpart (?P<sub_part_number>[A-Z0-9])", li_tag.text.strip()).group('sub_part_number')
+                h2_id = li_tag.find_previous_sibling('h2').attrs['id']
+                li_count_for_sub_part += 1
+                li_tag = self.create_li_with_anchor(li_tag, f"{h2_id}sp{sub_part_id}", "snav", li_count_for_part)
+                next_tag = li_tag.find_next_sibling()
+                ul_tag_for_sub_part.attrs['class'] = 'leaders'
+                if next_tag.name == "h2":
+                    li_tag.wrap(ul_tag_for_sub_part)
+                    ul_tag_for_sub_part.wrap(nav_tag_for_sub_part_ul)
+                    ul_tag_for_sub_part = self.soup.new_tag("ul")
+                    nav_tag_for_sub_part_ul = self.soup.new_tag("nav")
+                    li_count_for_sub_part = 0
+                else:
+                    li_tag.wrap(ul_tag_for_sub_part)
             else:
                 ul_tag_for_sub_section.attrs['class'] = 'leaders'
                 ul_tag_for_header5.attrs['class'] = 'leaders'
                 h4_id = li_tag.find_previous_sibling("h4").attrs['id']
                 sub_section_id = re.sub(r'[^a-zA-Z0-9]', '', li_tag.text.strip()).lower()
                 if re.search('^—.*', li_tag.text.strip()):
-                    id_of_parent = re.sub(r'[^a-zA-Z0-9]', '',
-                                          li_tag.find_previous_sibling().find_all("li", class_="notes_to_decision")[
-                                              -1].text).lower()
+                    id_of_parent = re.sub(r'[^a-zA-Z0-9]', '',li_tag.find_previous_sibling().find_all("li", class_="notes_to_decision")[-1].text).lower()
                     h5_id = f"{h4_id}-{id_of_parent}-{sub_section_id}"
                     li_tag = self.create_li_with_anchor(li_tag, h5_id)
                     if re.search('^—.*', li_tag.find_next_sibling().text.strip()):
@@ -267,9 +285,15 @@ class UnstructuredHtmlToStructuredHtml:
                         ul_tag_for_sub_section = self.soup.new_tag("ul")
                 else:
                     h5_id = f"{h4_id}-{sub_section_id}"
-                    self.create_li_with_anchor(li_tag, h5_id)
+                    duplicate = self.soup.find_all("a", href='#' + h5_id)
+                    if len(duplicate):
+                        count_for_duplicate += 1
+                        id_count = str(count_for_duplicate).zfill(2)
+                        h5_id = f"{h5_id}.{id_count}"
+                    else:
+                        count_for_duplicate = 0
+                    li_tag=self.create_li_with_anchor(li_tag, h5_id)
                     li_tag['class'] = 'notes_to_decision'
-                    nav_tag_for_notes_to_decision_ul = self.soup.new_tag("nav")
                     if li_tag.find_next_sibling().name == "h5":
                         li_tag.wrap(ul_tag_for_header5)
                         ul_tag_for_header5.wrap(nav_tag_for_notes_to_decision_ul)
@@ -292,82 +316,104 @@ class UnstructuredHtmlToStructuredHtml:
 
     def add_citation(self):
         for tag in self.soup.find_all(["p", "li"]):
-            tag_string = ''
-            text = str(tag)
-            text = re.sub('^<p[^>]*>|</p>$', '', text.strip())
-            cite_tag_pattern = {
-                'alr_pattern': '\d+ A.(L.R.)?( Fed. )?(\d[a-z]{1,2})?( Art.)? ?\d+',
-                'pl_pattern': '(impl\. am\. )?P\.L\. \d+',
-                'gl_pattern': '(G\.L\. ?\d+)',
-                'us_ammend': 'U\.S\. Const\., Amend\. (\d+|(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})\.)( C)?',
-                'sct': '(\d+ S\. Ct\. \d+)',
-                'led': '(\d+ L\. Ed\. \d+[a-z] \d+)',
-                'ann_laws': '(Ann\. Laws ch\. \d+)',
-                'ri': '(\d+ R\.I\. \d+)',
-                'ri_lexis': '(\d+ R\.I\. LEXIS \d+)',
-                'us': '(\d+ U\.S\. \d+)',
-                'us_lexis': '(\d+ U\.S\. LEXIS \d+)',
-                'a_2d': '(\d+ A\.2d \d+)',
-                'roger': '\d+ R(\.|oger )W(\.|illiams )U\. ?L\. Rev. \d+',
-                'cfr': '(\d+ CFR \d+\.\d+(?!\d+-))',
-                'usc': '(\d+ U\.S\.C\.)',
-                'supp': '(\d+ F\. Supp\. \d+)',
-                'us_dist_lexis': '(U\.S\. Dist\. LEXIS \d+)'
-            }
-            for key in cite_tag_pattern:
-                cite_pattern = cite_tag_pattern[key]
-                if re.search(cite_pattern, tag.text.strip()) and tag.attrs['class'] != "nav_li":
-                    for cite_pattern in set(
-                            match[0] for match in re.findall('(' + cite_tag_pattern[key] + ')', tag.text.strip())):
-                        tag_string = re.sub(cite_pattern, f"<cite>{cite_pattern}</cite>", text)
-                        text = tag_string
-
-            if re.search(
-                    '\d+-\d+(-\d+)?(\.\d+(-\d+)?(\.\d+)?)?(\([a-z]+\))?(\([0-9]\))?(\((ix|iv|v?i{0,3})\))?(\([A-Z]+\))?',
-                    tag.text.strip()) and tag.attrs['class'] != "nav_li":
-                for pattern in sorted(set(match[0] for match in re.findall('(\d+-\d+(-\d+)?(\.\d+(-\d+)?(\.\d+)?)?(\([a-z]+\))?(\([0-9]\))?(\((ix|iv|v?i{0,3})\))?(\([A-Z]+\))?)',tag.text.strip()))):
-                    section_match = re.search("(?P<section_id>(?P<title_id>\d+)-(?P<chapter_id>\d+)((-\d+)?(\.\d+(-\d+)?(\.\d+)?)?))(\((?P<li_alpha>[a-z]+)\))?(\((?P<li_num>[0-9])\))?(\((?P<roman_id>(ix|iv|v?i{0,3}))\))?(\((?P<caps_alpha>[A-Z])+\))?",
-                        pattern)
-                    file_exists = exists(f'/home/mis/PycharmProjects/practice/venv/ricode/modified/gov.ri.code.title.{section_match.group("title_id").zfill(2)}.html')
-                    if file_exists:
-                        file = open(f'/home/mis/PycharmProjects/practice/venv/ricode/modified/gov.ri.code.title.{section_match.group("title_id").zfill(2)}.html')
-                        content = file.read()
-                        file.close()
-                    else:
-                        continue
-                    if re.search('\d+-\d+-\d+\.\d+', pattern):
-                        if re.search(f'id="(?P<tag_id>(.+s{pattern}))"', content):
-                            tag_id = re.search(f'id="(?P<tag_id>(.+s{pattern}))"', content).group('tag_id')
-                            tag_string = re.sub(pattern,f"<cite><a href=http://localhost:63342/practice/venv/ricode/modified/gov.ri.code.title.{section_match.group('title_id').zfill(2)}.html?_ijt=lartillgujbilc2c7ak6tlmhr8&_ij_reload=RELOAD_ON_SAVE#{tag_id} target='_self'>{pattern}</a></cite>",text)
+            if tag['class'] not in ["notes_to_decision","notes_section"]:
+                tag_string = ''
+                text = str(tag)
+                text = re.sub('^<p[^>]*>|</p>$', '', text.strip())
+                cite_tag_pattern = {
+                    'alr_pattern': '\d+ A.L.R.( Fed. )?(\d[a-z]{1,2})?( Art.)? ?\d+|\d+ A. Fed. (\d[a-z]{1,2})?( Art.)? ?\d+',
+                    'pl_pattern': '(impl\. am\. )?P\.L\. \d+',
+                    'gl_pattern': '(G\.L\. ?\d+)',
+                    'us_ammend': 'U\.S\. Const\., Amend\. (\d+|(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})\.)( C)?',
+                    'sct': '(\d+ S\. Ct\. \d+)',
+                    'led': '(\d+ L\. Ed\. \d+[a-z] \d+)',
+                    'ann_laws': '(Ann\. Laws ch\. \d+)',
+                    'ri': '(\d+ R\.I\. \d+)',
+                    'ri_lexis': '(\d+ R\.I\. LEXIS \d+)',
+                    'us': '(\d+ U\.S\. \d+)',
+                    'us_lexis': '(\d+ U\.S\. LEXIS \d+)',
+                    'a_2d': '(\d+ A\.2d \d+)',
+                    'roger': '\d+ R(\.|oger )W(\.|illiams )U\. ?L\. Rev. \d+',
+                    'cfr': '(\d+ CFR \d+\.\d+(?!\d+-))',
+                    'usc': '(\d+ U\.S\.C\.)',
+                    'supp': '(\d+ F\. Supp\. \d+)',
+                    'us_dist_lexis': '(U\.S\. Dist\. LEXIS \d+)'
+                }
+                for key in cite_tag_pattern:
+                    cite_pattern = cite_tag_pattern[key]
+                    if re.search(cite_pattern, tag.text.strip()) and tag.attrs['class'] != "nav_li":
+                        for cite_pattern in set(
+                                match[0] for match in re.findall('(' + cite_tag_pattern[key] + ')', tag.text.strip())):
+                            tag_string = re.sub(cite_pattern, f'<cite class="ocri">{cite_pattern}</cite>', text)
                             text = tag_string
-                    elif re.search('\d+-\d+(-\d+)?(\.\d+(-\d+)?(\.\d+)?)?\([a-z]+\)\([0-9]\)', pattern):
-                        alpha_id = section_match.group('li_alpha')
-                        number_id = section_match.group('li_num')
-                        section_id = section_match.group('section_id')
-                        if re.search(f'id=".+s{section_id}ol1{alpha_id}{number_id}"', content):
-                            tag_id = re.search(f'id="(?P<tag_id>(.+s{section_id}ol1{alpha_id}{number_id}))"',content).group('tag_id')
-                            tag_string = re.sub(fr'{re.escape(pattern)}',f"<cite><a href=http://localhost:63342/practice/venv/ricode/modified/gov.ri.code.title.{section_match.group('title_id').zfill(2)}.html?_ijt=lartillgujbilc2c7ak6tlmhr8&_ij_reload=RELOAD_ON_SAVE#{tag_id} target='_self'>{pattern}</a></cite>",text)
-                        text = tag_string
-                    else:
-                        if re.search('(?<!\.|-)\d+-\d+(?!((\d)?\.\d+)|((\d)?-\d+))', pattern):  # 12-32
-                            chapter_id = section_match.group('chapter_id').zfill(2)
-                            if re.search(f'id=".+c{chapter_id}"', content):
-                                tag_id = re.search(f'id="(?P<tag_id>(.+c{chapter_id}))"', content).group('tag_id')
-                                tag_string = re.sub(pattern,f"<cite><a href=http://localhost:63342/practice/venv/ricode/modified/gov.ri.code.title.{section_match.group('title_id').zfill(2)}.html?_ijt=lartillgujbilc2c7ak6tlmhr8&_ij_reload=RELOAD_ON_SAVE#{tag_id} target='_self'>{pattern}</a></cite>",text)
+
+                if re.search('\d+[A-Z]?-\d+(-\d+)?(\.\d+(-\d+)?(\.\d+)?)?((\([a-z 0-9 (ix|iv|v?i{0,3}) A-Z 0-9]{1,3}\) ?)+)?',
+                             tag.text.strip()) and tag.attrs['class'] != "nav_li":
+                    for pattern in sorted(set(match[0] for match in re.findall(
+                            '(\d+[A-Z]?-\d+(-\d+)?(\.\d+(-\d+)?(\.\d+)?)?((\([a-z 0-9 (ix|iv|v?i{0,3}) A-Z]{1,3}\) ?)+)?)',
+                            tag.text.strip()))):
+                        section_match = re.search(
+                            "(?P<section_id>(?P<title_id>\d+[A-Z]?)-(?P<chapter_id>\d+)((-\d+)?(\.\d+(-\d+)?(\.\d+)?)?))",
+                            pattern)
+                        file_exists = exists(
+                            f'/home/mis/PycharmProjects/practice/venv/ricode/modified/gov.ri.code.title.{section_match.group("title_id").zfill(2)}.html')
+                        if file_exists:
+                            file = open(
+                                f'/home/mis/PycharmProjects/practice/venv/ricode/modified/gov.ri.code.title.{section_match.group("title_id").zfill(2)}.html')
+                            content = file.read()
+                            file.close()
                         else:
-                            if re.search('\d+-\d+-\d', pattern):
-                                if re.search(f'id=".+s{pattern}"', content):
-                                    tag_id = re.search(f'id="(?P<tag_id>(.+s{pattern}))"', content).group('tag_id')
-                                    tag_string = re.sub(pattern + '(?!((\d)?\.\d+)|(\d+))',f"<cite><a href=http://localhost:63342/practice/venv/ricode/modified/gov.ri.code.title.{section_match.group('title_id').zfill(2)}.html?_ijt=lartillgujbilc2c7ak6tlmhr8&_ij_reload=RELOAD_ON_SAVE#{tag_id} target='_self'>{pattern}</a></cite>",text)
-                            elif re.search('\d+-\d+-\d+', pattern):
-                                if re.search(f'id=".+s{pattern}"', content):
-                                    tag_id = re.search(f'id="(?P<tag_id>(.+s{pattern}))"', content).group('tag_id')
-                                    tag_string = re.sub(pattern + '(?!((\d)?\.\d+))',f"<cite><a href=http://localhost:63342/practice/venv/ricode/modified/gov.ri.code.title.{section_match.group('title_id').zfill(2)}.html?_ijt=lartillgujbilc2c7ak6tlmhr8&_ij_reload=RELOAD_ON_SAVE#{tag_id} target='_self'>{pattern}</a></cite>",text)
-                            elif re.search('\d+-\d+\.\d+-\d+(\.\d+)?', pattern):
-                                if re.search(f'id=".+s{pattern}"', content):
-                                    tag_id = re.search(f'id="(?P<tag_id>(.+s{pattern}))"', content).group('tag_id')
-                                    tag_string = re.sub(pattern,f"<cite><a href=http://localhost:63342/practice/venv/ricode/modified/gov.ri.code.title.{section_match.group('title_id').zfill(2)}.html?_ijt=lartillgujbilc2c7ak6tlmhr8&_ij_reload=RELOAD_ON_SAVE#{tag_id} target='_self'>{pattern}</a></cite>",text)
+                            continue
+                        if re.search(f'\d+[A-Z]?-\d+(-\d+)?(\.\d+(-\d+)?(\.\d+)?)?(\([a-z 0-9 (ix|iv|v?i{0, 3}) A-Z ]+\) ?)+',
+                                     pattern.strip()):
+                            match = re.search(f'(\([a-z 0-9 (ix|iv|v?i{0, 3}) A-Z ]+\) ?)+', pattern.strip()).group()
+                            match = match.replace('(', '').replace(')', '')
+                            if re.search('[A-Z]', match):
+                                caps_alpha = re.search('(?P<caps_alpha>([A-Z]))', match).group('caps_alpha')
+                                match = match.replace(caps_alpha, f'-{caps_alpha}')
+                            section_id = section_match.group('section_id')
+                            if re.search(f'id=".+s{section_id}ol1{match}"', content):
+                                tag_id = re.search(f'id="(?P<tag_id>(.+s{section_id}ol1{match}))"', content).group('tag_id')
+                                tag_string = re.sub(fr'{re.escape(pattern)}',
+                                                    f'<cite class="ocri"><a href=http://localhost:63342/practice/venv/ricode/modified/gov.ri.code.title.{section_match.group("title_id").zfill(2)}.html?_ijt=lartillgujbilc2c7ak6tlmhr8&_ij_reload=RELOAD_ON_SAVE#{tag_id} target="_self">{pattern}</a></cite>',
+                                                    text)
+
+                        elif re.search('\d+[A-Z]?-\d+-\d+\.\d+', pattern):
+                            if re.search(f'id=".+s{pattern}"', content):
+                                tag_id = re.search(f'id="(?P<tag_id>(.+s{pattern}))"', content).group('tag_id')
+                                tag_string = re.sub(fr'{re.escape(pattern)}',f'<cite class="ocri"><a href=http://localhost:63342/practice/venv/ricode/modified/gov.ri.code.title.{section_match.group("title_id").zfill(2)}.html?_ijt=lartillgujbilc2c7ak6tlmhr8&_ij_reload=RELOAD_ON_SAVE#{tag_id} target="_self">{pattern}</a></cite>',text)
+
+                        else:
+                            if re.search('(?<!\.|-)\d+[A-Z]?-\d+(?!((\d)?\.\d+)|((\d)?-\d+))', pattern):  # 12-32
+                                chapter_id = section_match.group('chapter_id').zfill(2)
+                                if re.search(f'id=".+c{chapter_id}"', content):
+                                    tag_id = re.search(f'id="(?P<tag_id>(.+c{chapter_id}))"', content).group('tag_id')
+                                    tag_string = re.sub(fr'{re.escape(pattern)}',
+                                                        f'<cite class="ocri"><a href=http://localhost:63342/practice/venv/ricode/practice/gov.ri.code.title.{section_match.group("title_id").zfill(2)}.html?_ijt=lartillgujbilc2c7ak6tlmhr8&_ij_reload=RELOAD_ON_SAVE#{tag_id} target="_self">{pattern}</a></cite>',
+                                                        text)
+                            else:
+                                if re.search('\d+[A-Z]?-\d+-\d(?!(\d+))', pattern):
+                                    if re.search(f'id=".+s{pattern}"', content):
+                                        tag_id = re.search(f'id="(?P<tag_id>(.+s{pattern}))"', content).group('tag_id')
+                                        tag_string = re.sub(fr'{re.escape(pattern)}' + '(?!((\d)?\.\d+)|(\d+))',f'<cite class="ocri"><a href=http://localhost:63342/practice/venv/ricode/modified/gov.ri.code.title.{section_match.group("title_id").zfill(2)}.html?_ijt=lartillgujbilc2c7ak6tlmhr8&_ij_reload=RELOAD_ON_SAVE#{tag_id} target="_self">{pattern}</a></cite>',text)
+                                elif re.search('\d+[A-Z]?-\d+-\d+(?!\.\d+)', pattern):
+                                    if re.search(f'id=".+s{pattern}"', content):
+                                        tag_id = re.search(f'id="(?P<tag_id>(.+s{pattern}))"', content).group('tag_id')
+                                        tag_string = re.sub(fr'{re.escape(pattern)}' + '(?!((\d)?\.\d+))',
+                                                            f'<cite class="ocri"><a href=http://localhost:63342/practice/venv/ricode/modified/gov.ri.code.title.{section_match.group("title_id").zfill(2)}.html?_ijt=lartillgujbilc2c7ak6tlmhr8&_ij_reload=RELOAD_ON_SAVE#{tag_id} target="_self">{pattern}</a></cite>',
+                                                            text)
+                                elif re.search('\d+[A-Z]?-\d+\.\d+-\d+(\.\d+)?', pattern):
+                                    if re.search(f'id=".+s{pattern}"', content):
+                                        tag_id = re.search(f'id="(?P<tag_id>(.+s{pattern}))"', content).group('tag_id')
+                                        tag_string = re.sub(fr'{re.escape(pattern)}',
+                                                            f'<cite class="ocri"><a href=http://localhost:63342/practice/venv/ricode/modified/gov.ri.code.title.{section_match.group("title_id").zfill(2)}.html?_ijt=lartillgujbilc2c7ak6tlmhr8&_ij_reload=RELOAD_ON_SAVE#{tag_id} target="_self">{pattern}</a></cite>',
+                                                            text)
                         text = tag_string
+                if tag_string:
+                    tag_class=tag['class']
+                    tag.clear()
+                    tag.append(BeautifulSoup(tag_string, features="html.parser"))
+                    tag['class']=tag_class
 
     def create_ol_tag(self):
         alphabet = 'a'
@@ -393,7 +439,7 @@ class UnstructuredHtmlToStructuredHtml:
                 continue
             class_name = tag['class'][0]
             h3_id = tag.find_previous_sibling("h3").attrs['id']
-            if class_name == self.dictionary_to_store_class_name['History'] or class_name == self.dictionary_to_store_class_name['ol_of_i']:
+            if class_name == self.dictionary_to_store_class_name['History'] or class_name == self.dictionary_to_store_class_name['ol_of_i'] or self.dictionary_to_store_class_name['h4']:
                 if re.search("^[a-z A-Z]+", tag.text.strip()):
                     next_sibling = tag.find_next_sibling()
                     if next_sibling and tag.name == "h3":
@@ -406,159 +452,9 @@ class UnstructuredHtmlToStructuredHtml:
                 if next_tag.next_element.name and next_tag.next_element.name == 'br':
                     next_tag.decompose()
                     next_tag = tag.find_next_sibling()
+                if re.search('If one of the following provisions of title 6A specifies the applicable law, that provision governs and a',tag.text.strip()):
+                    print()
                 if next_tag.name != 'h4':
-                    # if re.search(f'^\({number}\) \({roman_number}\) \({caps_alpha}\)', tag.text.strip()):
-                    #     tag.name = "li"
-                    #     text = str(tag)
-                    #     tag_string = re.sub('^<li[^>]*>(<span.*</span>)?<b>\(\d{1,2}\) \((ix|iv|v?i{0,3})\) \([A-Z]\)</b>|^<li[^>]*>(<span.*</span>)?\(\d{1,2}\) \((ix|iv|v?i{0,3})\) \([A-Z]\)|</li>$','', text.strip())
-                    #     tag.clear()
-                    #     tag.append(BeautifulSoup(tag_string, features="html.parser"))
-                    #     tag.wrap(ol_tag_for_caps_alphabet)
-                    #     li_tag_for_number = self.soup.new_tag("li")
-                    #     li_tag_for_number['id'] = f"{h3_id}ol{ol_count}{number}"
-                    #     li_tag_for_roman = self.soup.new_tag("li")
-                    #     li_tag_for_roman['id'] = f"{h3_id}ol{ol_count}{roman_number}"
-                    #     li_tag_for_number['class'] = "number"
-                    #     li_tag.append(ol_tag_for_roman)
-                    #     tag.attrs['id'] = f"{h3_id}ol{ol_count}{number}{roman_number}-{caps_alpha}"
-                    #     li_tag_for_roman['class'] = "roman"
-                    #     li_tag_for_roman.append(ol_tag_for_caps_alphabet)
-                    #     ol_tag_for_roman.append(li_tag_for_roman)
-                    #     li_tag_for_number.append(ol_tag_for_roman)
-                    #     ol_tag_for_number.append(li_tag_for_number)
-                    #     number += 1
-                    #     roman_number = roman.fromRoman(roman_number.upper())
-                    #     roman_number += 1
-                    #     roman_number = roman.toRoman(roman_number).lower()
-                    #     caps_alpha = chr(ord(caps_alpha) + 1)
-                    # elif re.search(f'^\({alphabet}\) \({number}\)', tag.text.strip()):#done
-                    #     tag.name = "li"
-                    #     text = str(tag)
-                    #     tag_string = re.sub('^<li[^>]*>(<span.*</span>)?<b>\([a-z]\)( \(\d\))?</b> (\(\d+\))?|^<li[^>]*>(<span.*</span>)?\([a-z]\) \(\d\)|</li>$','', text.strip())
-                    #     tag.clear()
-                    #     tag.append(BeautifulSoup(tag_string, features="html.parser"))
-                    #     tag.wrap(ol_tag_for_number)
-                    #     li_tag = self.soup.new_tag("li")
-                    #     li_tag['id'] = f"{h3_id}ol{ol_count}{alphabet}"
-                    #     li_tag['class'] = "alphabet"
-                    #     ol_tag_for_number.wrap(li_tag)
-                    #     tag.attrs['id'] = f"{h3_id}ol{ol_count}{alphabet}{number}"
-                    #     tag['class'] = "number"
-                    #     li_tag.wrap(ol_tag_for_alphabet)
-                    #     number += 1
-                    #     alphabet = chr(ord(alphabet) + 1)
-                    #     if re.search('^[a-z A-Z]+', next_tag.text.strip()):
-                    #         while re.search("^[a-z A-Z]+", next_tag.text.strip()):
-                    #             sub_tag = next_tag.find_next_sibling()
-                    #             p_tag = self.soup.new_tag("p")
-                    #             p_tag.string = next_tag.text
-                    #             p_tag['id'] = f"{tag['id']}.{count_of_p_tag}"
-                    #             count_of_p_tag += 1
-                    #             p_tag['class'] = next_tag['class']
-                    #             tag.append(p_tag)
-                    #             next_tag.decompose()
-                    #             next_tag = sub_tag
-                    #         count_of_p_tag = 1
-                    # elif re.search(f'^\({number}\) \({roman_number}\)', tag.text.strip()):
-                    #     tag.name = "li"
-                    #     text = str(tag)
-                    #     tag_string = re.sub(
-                    #         '^<li[^>]*>(<span.*</span>)?<b>\(\d{1,2}\) \((ix|iv|v?i{0,3})\)</b>|^<li[^>]*>(<span.*</span>)?\(\d{1,2}\) \((ix|iv|v?i{0,3})\)|</li>$',
-                    #         '', text.strip())
-                    #     tag.clear()
-                    #     tag.append(BeautifulSoup(tag_string, features="html.parser"))
-                    #     tag.wrap(ol_tag_for_roman)
-                    #     li_tag = self.soup.new_tag("li")
-                    #     li_tag['id'] = f"{h3_id}ol{ol_count}{number}"
-                    #     li_tag['class'] = "number"
-                    #     li_tag.append(ol_tag_for_roman)
-                    #     tag.attrs['id'] = f"{h3_id}ol{ol_count}{number}{roman_number}"
-                    #     roman_number = roman.fromRoman(roman_number.upper())
-                    #     roman_number += 1
-                    #     roman_number = roman.toRoman(roman_number).lower()
-                    #     tag['class'] = "roman"
-                    #     ol_tag_for_number.append(li_tag)
-                    #     number += 1
-                    # elif re.search(f'^\({inner_num}\) \({inner_roman}\)', tag.text.strip()):
-                    #     tag.name = "li"
-                    #     text = str(tag)
-                    #     tag_string = re.sub('^<li[^>]*>(<span.*</span>)?<b>\(\d{1,2}\) \((ix|iv|v?i{0,3})\)</b>|^<li[^>]*>(<span.*</span>)?\(\d{1,2}\) \((ix|iv|v?i{0,3})\)|</li>$','', text.strip())
-                    #     tag.clear()
-                    #     tag.append(BeautifulSoup(tag_string, features="html.parser"))
-                    #     tag.wrap(ol_tag_for_inner_roman)
-                    #     li_tag = self.soup.new_tag("li")
-                    #     if ol_tag_for_caps_alphabet.li:
-                    #         id_of_last_li = ol_tag_for_caps_alphabet.find_all("li")[-1].attrs['id']
-                    #         # (a) (1)
-                    #     elif ol_tag_for_number.li:
-                    #         id_of_last_li = ol_tag_for_number.find_all("li", class_="number")[-1].attrs['id']
-                    #     li_tag['id'] = f"{id_of_last_li}{inner_num}"
-                    #     li_tag['class'] = "inner_num"
-                    #     li_tag.append(ol_tag_for_inner_roman)
-                    #     tag.attrs['id'] = f"{h3_id}ol{ol_count}{inner_num}{inner_roman}"
-                    #     inner_roman = roman.fromRoman(inner_roman.upper())
-                    #     inner_roman += 1
-                    #     inner_roman = roman.toRoman(inner_roman).lower()
-                    #     ol_tag_for_inner_number.append(li_tag)
-                    #     inner_num += 1
-                    # elif re.search(f'^\({roman_number}\) \({caps_alpha}\)', tag.text.strip()):
-                    #     tag.name = "li"
-                    #     text = str(tag)
-                    #     tag_string = re.sub('^<li[^>]*>(<span.*</span>)?<b>\((xc|xl|l?x{0,3})(ix|iv|v?i{0,3})\) \([A-Z]\)</b>|^<li[^>]*>(<span.*</span>)?\((xc|xl|l?x{0,3})(ix|iv|v?i{0,3})\) \([A-Z]\)|</li>$','', text.strip())
-                    #     tag.clear()
-                    #     tag.append(BeautifulSoup(tag_string, features="html.parser"))
-                    #     tag.wrap(ol_tag_for_caps_alphabet)
-                    #     li_tag = self.soup.new_tag("li")
-                    #     if ol_tag_for_number.li:
-                    #         id_of_last_li = ol_tag_for_number.find_all("li", class_="number")[-1].attrs['id']
-                    #     elif ol_tag_for_alphabet.li:
-                    #         id_of_last_li = ol_tag_for_alphabet.find_all("li", class_="alphabet")[-1].attrs['id']
-                    #     li_tag['id'] = f"{id_of_last_li}{roman_number}"
-                    #     li_tag['class'] = "roman"
-                    #     li_tag.append(ol_tag_for_caps_alphabet)
-                    #     tag.attrs['id'] = f"{id_of_last_li}{roman_number}-{caps_alpha}"
-                    #     caps_alpha = chr(ord(caps_alpha) + 1)
-                    #     ol_tag_for_roman.append(li_tag)
-                    #     roman_number = roman.fromRoman(roman_number.upper())
-                    #     roman_number += 1
-                    #     roman_number = roman.toRoman(roman_number).lower()
-                    # elif re.search(f'^\({number}\) \({caps_alpha}\)', tag.text.strip()):
-                    #     tag.name = "li"
-                    #     text = str(tag)
-                    #     tag_string = re.sub('^<li[^>]*>(<span.*</span>)?<b>\(\d{1,2}\) \([A-Z]\)</b>|^<li[^>]*>(<span.*</span>)?\(\d{1,2}\) \([A-Z]\)|</li>$','', text.strip())
-                    #     tag.clear()
-                    #     tag.append(BeautifulSoup(tag_string, features="html.parser"))
-                    #     tag.wrap(ol_tag_for_caps_alphabet)
-                    #     li_tag = self.soup.new_tag("li")
-                    #     li_tag['id'] = f"{h3_id}ol{ol_count}{number}"
-                    #     li_tag['class'] = "number"
-                    #     li_tag.append(ol_tag_for_caps_alphabet)
-                    #     tag.attrs['id'] = f"{h3_id}ol{ol_count}{number}-{caps_alpha}"
-                    #     caps_alpha = chr(ord(caps_alpha) + 1)
-                    #     ol_tag_for_number.append(li_tag)
-                    #     number += 1
-                    # elif re.search(f'^\({number}\) \({inner_alphabet}\)', tag.text.strip()):
-                    #     tag.name = "li"
-                    #     text = str(tag)
-                    #     tag_string = re.sub('^<li[^>]*>(<span.*</span>)?<b>\(\d{1,2}\) \([a-z]\)</b>|^<li[^>]*>(<span.*</span>)?\(\d{1,2}\) \([a-z]\)|</li>$','', text.strip())
-                    #     tag.clear()
-                    #     tag.append(BeautifulSoup(tag_string, features="html.parser"))
-                    #     tag.wrap(ol_tag_for_inner_alphabet)
-                    #     li_tag = self.soup.new_tag("li")
-                    #     li_tag['id'] = f"{h3_id}ol{ol_count}{number}"
-                    #     li_tag['class'] = "number"
-                    #     li_tag.append(ol_tag_for_inner_alphabet)
-                    #     tag.attrs['id'] = f"{h3_id}ol{ol_count}{number}{inner_alphabet}"
-                    #     inner_alphabet = chr(ord(inner_alphabet) + 1)
-                    #     ol_tag_for_number.append(li_tag)
-                    #     number += 1
-                    #     if re.search(f'\({alphabet}\)',next_tag.text.strip()):
-                    #         ol_tag_for_number.find_all("li",class_="number")[-1].append(ol_tag_for_inner_alphabet)
-                    #         ol_tag_for_alphabet.find_all("li",class_="alphabet")[-1].append(ol_tag_for_number)
-                    #         ol_tag_for_inner_alphabet=self.soup.new_tag("ol",type="a")
-                    #         ol_tag_for_number=self.soup.new_tag("ol")
-                    #         number=1
-                    #         inner_alphabet='a'
                     if re.search(f'^\({caps_alpha}\)', tag.text.strip()):
                         tag.name = "li"
                         text = str(tag)
@@ -587,12 +483,13 @@ class UnstructuredHtmlToStructuredHtml:
                                 ol_tag_for_caps_alphabet.append(tag)
                                 next_tag = sub_tag
                             count_of_p_tag = 1
-                        if re.search(f'^\({roman_number}\)', next_tag.text.strip()):
+                        if re.search(f'^\({inner_roman}\)',next_tag.text.strip()):
+                            continue
+                        elif re.search(f'^\({roman_number}\)', next_tag.text.strip()):
                             if ol_tag_for_roman.li:
                                 ol_tag_for_roman.find_all("li", class_="roman")[-1].append(ol_tag_for_caps_alphabet)
                                 ol_tag_for_caps_alphabet = self.soup.new_tag("ol", type="A")
                                 caps_alpha = 'A'
-
                         elif re.search(f'^\({number}\)', next_tag.text.strip()):
                             if ol_tag_for_roman.li:
                                 ol_tag_for_roman.find_all("li", class_="roman")[-1].append(ol_tag_for_caps_alphabet)
@@ -606,15 +503,23 @@ class UnstructuredHtmlToStructuredHtml:
                                 ol_tag_for_caps_alphabet = self.soup.new_tag("ol", type="A")
                                 caps_alpha = 'A'
                         elif re.search(f'^\({alphabet}\)', next_tag.text.strip()):
-                            ol_tag_for_roman.find_all("li", class_="roman")[-1].append(ol_tag_for_caps_alphabet)
-                            ol_tag_for_number.find_all("li", class_="number")[-1].append(ol_tag_for_roman)
-                            ol_tag_for_alphabet.find_all("li", class_="alphabet")[-1].append(ol_tag_for_number)
-                            ol_tag_for_caps_alphabet = self.soup.new_tag("ol", type="A")
-                            caps_alpha = 'A'
-                            ol_tag_for_roman = self.soup.new_tag("ol", type="i")
-                            roman_number = 'i'
-                            ol_tag_for_number = self.soup.new_tag("ol")
-                            number = 1
+                            if ol_tag_for_roman.li:#a1A
+                                ol_tag_for_roman.find_all("li", class_="roman")[-1].append(ol_tag_for_caps_alphabet)
+                                ol_tag_for_number.find_all("li", class_="number")[-1].append(ol_tag_for_roman)
+                                ol_tag_for_alphabet.find_all("li", class_="alphabet")[-1].append(ol_tag_for_number)
+                                ol_tag_for_caps_alphabet = self.soup.new_tag("ol", type="A")
+                                caps_alpha = 'A'
+                                ol_tag_for_roman = self.soup.new_tag("ol", type="i")
+                                roman_number = 'i'
+                                ol_tag_for_number = self.soup.new_tag("ol")
+                                number = 1
+                            else:
+                                ol_tag_for_number.find_all("li", class_="number")[-1].append(ol_tag_for_caps_alphabet)
+                                ol_tag_for_alphabet.find_all("li", class_="alphabet")[-1].append(ol_tag_for_number)
+                                ol_tag_for_caps_alphabet = self.soup.new_tag("ol", type="A")
+                                caps_alpha = 'A'
+                                ol_tag_for_number = self.soup.new_tag("ol")
+                                number = 1
                     elif re.search(f'^\({caps_roman}\)', tag.text.strip()):
                         tag.name = "li"
                         text = str(tag)
@@ -648,6 +553,231 @@ class UnstructuredHtmlToStructuredHtml:
                             caps_alpha = 'A'
                             ol_tag_for_roman = self.soup.new_tag("ol", type="i")
                             roman_number = "i"
+                    elif re.search(f'^\({inner_roman}\)', tag.text.strip()) and ol_tag_for_caps_alphabet.li:
+                        tag.name = "li"
+                        text = str(tag)
+                        tag_string = re.sub(
+                            '^<li[^>]*>(<span.*</span>)?<b>\((xc|xl|l?x{0,3})(ix|iv|v?i{0,3})\)</b>|^<li[^>]*>(<span.*</span>)?\((xc|xl|l?x{0,3})(ix|iv|v?i{0,3})\)|</li>$',
+                            '', text.strip())
+                        tag.clear()
+                        tag.append(BeautifulSoup(tag_string, features="html.parser"))
+                        tag.wrap(ol_tag_for_inner_roman)
+                        if ol_tag_for_inner_number.li:
+                            id_of_last_li = ol_tag_for_inner_number.find_all("li", class_="inner_num")[-1].attrs[
+                                'id']
+                        elif ol_tag_for_caps_alphabet.li:
+                            id_of_last_li = ol_tag_for_caps_alphabet.find_all("li")[-1].attrs['id']
+                        tag['id'] = f"{id_of_last_li}{inner_roman}"
+                        inner_roman = roman.fromRoman(inner_roman.upper())
+                        inner_roman += 1
+                        inner_roman = roman.toRoman(inner_roman).lower()
+                        if re.search(f'^\({number}\)', next_tag.text.strip()):
+                            if ol_tag_for_inner_number.li:
+                                ol_tag_for_inner_number.find_all("li", class_="inner_num")[-1].append(ol_tag_for_inner_roman)
+                                ol_tag_for_inner_roman = self.soup.new_tag("ol", type="i")
+                                inner_roman = 'i'
+                                if ol_tag_for_caps_alphabet.li:
+                                    ol_tag_for_caps_alphabet.find_all("li")[-1].append(ol_tag_for_inner_number)
+                                    ol_tag_for_inner_number = self.soup.new_tag("ol")
+                                    inner_num = 1
+                                    if ol_tag_for_roman.li:
+                                        ol_tag_for_roman.find_all("li",class_="roman")[-1].append(ol_tag_for_caps_alphabet)
+                                        ol_tag_for_number.find_all("li",class_="number")[-1].append(ol_tag_for_roman)
+                                        ol_tag_for_roman=self.soup.new_tag("ol",type="i")
+                                        roman_number="i"
+                                        ol_tag_for_caps_alphabet=self.soup.new_tag("ol",type="A")
+                                        caps_alpha="A"
+                                    else:
+                                        ol_tag_for_number.find_all("li", class_="number")[-1].append(ol_tag_for_caps_alphabet)
+                                        ol_tag_for_caps_alphabet = self.soup.new_tag("ol", type="A")
+                                        caps_alpha = "A"
+                                else:
+                                    if ol_tag_for_roman.li:
+                                        ol_tag_for_roman.find_all("li",class_="roman")[-1].append(ol_tag_for_inner_number)
+                                        ol_tag_for_number.find_all("li",class_="number")[-1].append(ol_tag_for_roman)
+                                        ol_tag_for_roman=self.soup.new_tag("ol",type="i")
+                                        roman_number="i"
+                                        ol_tag_for_inner_number=self.soup.new_tag("ol")
+                                        inner_num=1
+                            elif ol_tag_for_caps_alphabet.li:
+                                ol_tag_for_caps_alphabet.find_all("li")[-1].append(ol_tag_for_inner_roman)
+                                ol_tag_for_inner_roman = self.soup.new_tag("ol", type="i")
+                                inner_roman = 'i'
+                                if ol_tag_for_roman.li:
+                                    ol_tag_for_roman.find_all("li", class_="roman")[-1].append(ol_tag_for_caps_alphabet)
+                                    ol_tag_for_number.find_all("li", class_="number")[-1].append(ol_tag_for_roman)
+                                    ol_tag_for_roman = self.soup.new_tag("ol", type="i")
+                                    roman_number = "i"
+                                    ol_tag_for_caps_alphabet = self.soup.new_tag("ol", type="A")
+                                    caps_alpha = "A"
+                                else:
+                                    ol_tag_for_number.find_all("li", class_="number")[-1].append(ol_tag_for_caps_alphabet)
+                                    ol_tag_for_caps_alphabet = self.soup.new_tag("ol", type="A")
+                                    caps_alpha = "A"
+                        elif re.search(f'^\({inner_num}\)', next_tag.text.strip()):
+                            if ol_tag_for_inner_number.li:
+                                ol_tag_for_inner_number.find_all("li", class_="inner_num")[-1].append(ol_tag_for_inner_roman)
+                                ol_tag_for_inner_roman = self.soup.new_tag("ol", type="i")
+                                inner_roman = 'i'
+                        elif re.search(f'^\({caps_alpha}\)', next_tag.text.strip()):
+                            if ol_tag_for_inner_number.li:
+                                ol_tag_for_inner_number.find_all("li", class_="inner_num")[-1].append(ol_tag_for_inner_roman)
+                                ol_tag_for_inner_roman = self.soup.new_tag("ol", type="i")
+                                inner_roman = 'i'
+                                if ol_tag_for_caps_alphabet.li:
+                                    ol_tag_for_caps_alphabet.find_all("li")[-1].append(ol_tag_for_inner_number)
+                                    ol_tag_for_inner_number = self.soup.new_tag("ol")
+                                    inner_num = 1
+                            elif ol_tag_for_caps_alphabet.li:
+                                ol_tag_for_caps_alphabet.find_all("li")[-1].append(ol_tag_for_inner_roman)
+                                ol_tag_for_inner_roman = self.soup.new_tag("ol", type="i")
+                                inner_roman = 'i'
+                        elif re.search(f'^\({alphabet}\)',next_tag.text.strip()):
+                            if ol_tag_for_inner_number.li:
+                                ol_tag_for_inner_number.find_all("li", class_="inner_num")[-1].append(ol_tag_for_inner_roman)
+                                ol_tag_for_inner_roman = self.soup.new_tag("ol", type="i")
+                                inner_roman = 'i'
+                                if ol_tag_for_caps_alphabet.li:
+                                    ol_tag_for_caps_alphabet.find_all("li")[-1].append(ol_tag_for_inner_number)
+                                    ol_tag_for_inner_number = self.soup.new_tag("ol")
+                                    inner_num = 1
+                                    if ol_tag_for_roman.li:
+                                        ol_tag_for_roman.find_all("li",class_="roman")[-1].append(ol_tag_for_caps_alphabet)
+                                        ol_tag_for_number.find_all("li",class_="number")[-1].append(ol_tag_for_roman)
+                                        ol_tag_for_alphabet.find_all("li",class_="alphabet")[-1].append(ol_tag_for_number)
+                                        ol_tag_for_caps_alphabet=self.soup.new_tag("ol",type="A")
+                                        caps_alpha="A"
+                                        ol_tag_for_number=self.soup.new_tag("ol")
+                                        number=1
+                                        ol_tag_for_roman=self.soup.new_tag("ol",type="i")
+                                        roman_number="i"
+                                    else:
+                                        ol_tag_for_number.find_all("li", class_="number")[-1].append(ol_tag_for_caps_alphabet)
+                                        ol_tag_for_alphabet.find_all("li", class_="alphabet")[-1].append(ol_tag_for_number)
+                                        ol_tag_for_caps_alphabet = self.soup.new_tag("ol", type="A")
+                                        caps_alpha = "A"
+                                        ol_tag_for_number = self.soup.new_tag("ol")
+                                        number = 1
+                                else:
+                                    if ol_tag_for_roman.li:
+                                        ol_tag_for_roman.find_all("li",class_="roman")[-1].append(ol_tag_for_inner_number)
+                                        ol_tag_for_number.find_all("li",class_="number")[-1].append(ol_tag_for_roman)
+                                        ol_tag_for_alphabet.find_all("li",class_="alphabet")[-1].append(ol_tag_for_number)
+                                        ol_tag_for_roman=self.soup.new_tag("ol",type="i")
+                                        roman_number="i"
+                                        ol_tag_for_number=self.soup.new_tag("ol")
+                                        number=1
+                                        ol_tag_for_inner_number=self.soup.new_tag("ol")
+                                        inner_num=1
+                            elif ol_tag_for_caps_alphabet.li:
+                                ol_tag_for_caps_alphabet.find_all("li")[-1].append(ol_tag_for_inner_roman)
+                                ol_tag_for_inner_roman = self.soup.new_tag("ol", type="i")
+                                inner_roman = 'i'
+                                if ol_tag_for_roman.li:
+                                    ol_tag_for_roman.find_all("li", class_="roman")[-1].append(ol_tag_for_caps_alphabet)
+                                    ol_tag_for_number.find_all("li", class_="number")[-1].append(ol_tag_for_roman)
+                                    ol_tag_for_alphabet.find_all("li", class_="alphabet")[-1].append(ol_tag_for_number)
+                                    ol_tag_for_caps_alphabet = self.soup.new_tag("ol", type="A")
+                                    caps_alpha = "A"
+                                    ol_tag_for_number = self.soup.new_tag("ol")
+                                    number = 1
+                                    ol_tag_for_roman = self.soup.new_tag("ol", type="i")
+                                    roman_number = "i"
+                                else:
+                                    ol_tag_for_number.find_all("li", class_="number")[-1].append(
+                                        ol_tag_for_caps_alphabet)
+                                    ol_tag_for_alphabet.find_all("li", class_="alphabet")[-1].append(ol_tag_for_number)
+                                    ol_tag_for_caps_alphabet = self.soup.new_tag("ol", type="A")
+                                    caps_alpha = "A"
+                                    ol_tag_for_number = self.soup.new_tag("ol")
+                                    number = 1
+                        else:
+                            continue
+                    elif re.search(f'^\({roman_number}\)', tag.text.strip()) and ol_tag_for_number.li:
+                        if re.search(f'^\({roman_number}\) \({caps_alpha}\)', tag.text.strip()):
+                            tag.name = "li"
+                            text = str(tag)
+                            tag_string = re.sub(
+                                '^<li[^>]*>(<span.*</span>)?<b>\((xc|xl|l?x{0,3})(ix|iv|v?i{0,3})\) \([A-Z]\)</b>|^<li[^>]*>(<span.*</span>)?\((xc|xl|l?x{0,3})(ix|iv|v?i{0,3})\) \([A-Z]\)|</li>$',
+                                '', text.strip())
+                            tag.clear()
+                            tag.append(BeautifulSoup(tag_string, features="html.parser"))
+                            tag.wrap(ol_tag_for_caps_alphabet)
+                            li_tag = self.soup.new_tag("li")
+                            if ol_tag_for_number.li:
+                                id_of_last_li = ol_tag_for_number.find_all("li", class_="number")[-1].attrs['id']
+                            elif ol_tag_for_alphabet.li:
+                                id_of_last_li = ol_tag_for_alphabet.find_all("li", class_="alphabet")[-1].attrs['id']
+                            li_tag['id'] = f"{id_of_last_li}{roman_number}"
+                            li_tag['class'] = "roman"
+                            li_tag.append(ol_tag_for_caps_alphabet)
+                            tag.attrs['id'] = f"{id_of_last_li}{roman_number}-{caps_alpha}"
+                            caps_alpha = chr(ord(caps_alpha) + 1)
+                            ol_tag_for_roman.append(li_tag)
+                            roman_number = roman.fromRoman(roman_number.upper())
+                            roman_number += 1
+                            roman_number = roman.toRoman(roman_number).lower()
+                        else:
+                            tag.name = "li"
+                            text = str(tag)
+                            tag_string = re.sub('^<li[^>]*>(<span.*</span>)?<b>\((xc|xl|l?x{0,3})(ix|iv|v?i{0,3})\)</b>|^<li[^>]*>(<span.*</span>)?\((xc|xl|l?x{0,3})(ix|iv|v?i{0,3})\)|</li>$','', text.strip())
+                            tag.clear()
+                            tag.append(BeautifulSoup(tag_string, features="html.parser"))
+                            tag.wrap(ol_tag_for_roman)
+                            tag['class'] = "roman"
+                            if ol_tag_for_number.li:
+                                id_of_last_li = ol_tag_for_number.find_all("li", class_="number")[-1].attrs['id']
+                            elif ol_tag_for_alphabet.li:
+                                id_of_last_li = ol_tag_for_alphabet.find_all("li", class_="alphabet")[-1].attrs['id']
+                            tag['id'] = f"{id_of_last_li}{roman_number}"
+                            roman_number = roman.fromRoman(roman_number.upper())
+                            roman_number += 1
+                            roman_number = roman.toRoman(roman_number).lower()
+                            if re.search('^“?[a-z A-Z]+',next_tag.text.strip()) or next_tag.next_element.name == "br":  # 5-31.1-1. after 16i 2 break
+                                while re.search("^“?[a-z A-Z]+", next_tag.text.strip()) and next_tag.name!="h4":
+                                    sub_tag = next_tag.find_next_sibling()
+                                    p_tag = self.soup.new_tag("p")
+                                    p_tag.string = next_tag.text
+                                    tag.append(p_tag)
+                                    id_of_last_li = ol_tag_for_roman.find_all("li", class_="roman")[-1].attrs['id']
+                                    p_tag['class'] = next_tag['class']
+                                    p_tag['id'] = f"{id_of_last_li}.{count_of_p_tag}"
+                                    count_of_p_tag += 1
+                                    ol_tag_for_roman.append(tag)
+                                    next_tag.decompose()
+                                    next_tag = sub_tag
+                                count_of_p_tag = 1
+                                while next_tag.next_element.name == "br":
+                                    sub_tag = next_tag.find_next_sibling()
+                                    next_tag.decompose()
+                                    next_tag = sub_tag
+                            if re.search(f'^\({number}\)', next_tag.text.strip()):
+                                if ol_tag_for_caps_alphabet.li:
+                                    ol_tag_for_caps_alphabet.find_all("li")[-1].append(ol_tag_for_roman)
+                                    ol_tag_for_number.find_all("li", class_="number")[-1].append(
+                                        ol_tag_for_caps_alphabet)
+                                    ol_tag_for_caps_alphabet = self.soup.new_tag("ol", type="A")
+                                    caps_alpha = 'A'
+                                    ol_tag_for_roman = self.soup.new_tag("ol", type="i")
+                                    roman_number = 'i'
+                                elif ol_tag_for_number.li:
+                                    ol_tag_for_number.find_all("li", class_="number")[-1].append(ol_tag_for_roman)
+                                    ol_tag_for_roman = self.soup.new_tag("ol", type="i")
+                                    roman_number = 'i'
+                            elif re.search(f'^\({alphabet}{alphabet}?\)', next_tag.text.strip()):
+                                if ol_tag_for_number.li:  # a 1 i
+                                    ol_tag_for_number.find_all("li", class_="number")[-1].append(ol_tag_for_roman)
+                                    ol_tag_for_alphabet.find_all("li", class_="alphabet")[-1].append(
+                                        ol_tag_for_number)
+                                    ol_tag_for_roman = self.soup.new_tag("ol", type="i")
+                                    roman_number = 'i'
+                                    ol_tag_for_number = self.soup.new_tag("ol")
+                                    number = 1
+                                elif ol_tag_for_alphabet.li:  # a i
+                                    ol_tag_for_alphabet.find_all("li", class_="alphabet")[-1].append(
+                                        ol_tag_for_roman)
+                                    ol_tag_for_roman = self.soup.new_tag("ol", type="i")
+                                    roman_number = 'i'
                     elif re.search(f'^\({alphabet}{alphabet}?\)', tag.text.strip()):
                         if re.search(f'^\({alphabet}\) \({number}\)', tag.text.strip()):
                             tag.name = "li"
@@ -741,6 +871,8 @@ class UnstructuredHtmlToStructuredHtml:
                                             ol_tag_for_number.find_all("li", class_="number")[-1].append(ol_tag_for_roman)
                                             ol_tag_for_roman = self.soup.new_tag("ol", type="i")
                                             roman_number = 'i'
+                                    elif re.search(f'^\({roman_number}\)',next_tag.text.strip()):
+                                        continue
                                     elif re.search(f'^\({alphabet}{alphabet}?\)', next_tag.text.strip()):
                                         if ol_tag_for_number.li:  # a 1 i
                                             ol_tag_for_number.find_all("li", class_="number")[-1].append(ol_tag_for_roman)
@@ -769,7 +901,7 @@ class UnstructuredHtmlToStructuredHtml:
                                     alphabet = 'a'
                                     ol_count = 1
                                     continue
-                                elif re.search('Section \d+', next_tag.text.strip()):
+                                elif re.search('^Section \d+', next_tag.text.strip()):
                                     ol_tag_for_alphabet = self.soup.new_tag("ol", type="a")
                                     alphabet = 'a'
                                     if re.search('\(a\)|\(\d\)', next_tag.find_next_sibling().text.strip()):
@@ -808,139 +940,6 @@ class UnstructuredHtmlToStructuredHtml:
                                 ol_tag_for_number.find_all("li", class_="number")[-1].append(ol_tag_for_inner_alphabet)
                                 ol_tag_for_inner_alphabet = self.soup.new_tag("ol", type="a")
                                 inner_alphabet = 'a'
-
-                    elif re.search(f'^\({roman_number}\)', tag.text.strip()):
-                        if re.search(f'^\({roman_number}\) \({caps_alpha}\)', tag.text.strip()):
-                            tag.name = "li"
-                            text = str(tag)
-                            tag_string = re.sub(
-                                '^<li[^>]*>(<span.*</span>)?<b>\((xc|xl|l?x{0,3})(ix|iv|v?i{0,3})\) \([A-Z]\)</b>|^<li[^>]*>(<span.*</span>)?\((xc|xl|l?x{0,3})(ix|iv|v?i{0,3})\) \([A-Z]\)|</li>$',
-                                '', text.strip())
-                            tag.clear()
-                            tag.append(BeautifulSoup(tag_string, features="html.parser"))
-                            tag.wrap(ol_tag_for_caps_alphabet)
-                            li_tag = self.soup.new_tag("li")
-                            if ol_tag_for_number.li:
-                                id_of_last_li = ol_tag_for_number.find_all("li", class_="number")[-1].attrs['id']
-                            elif ol_tag_for_alphabet.li:
-                                id_of_last_li = ol_tag_for_alphabet.find_all("li", class_="alphabet")[-1].attrs['id']
-                            li_tag['id'] = f"{id_of_last_li}{roman_number}"
-                            li_tag['class'] = "roman"
-                            li_tag.append(ol_tag_for_caps_alphabet)
-                            tag.attrs['id'] = f"{id_of_last_li}{roman_number}-{caps_alpha}"
-                            caps_alpha = chr(ord(caps_alpha) + 1)
-                            ol_tag_for_roman.append(li_tag)
-                            roman_number = roman.fromRoman(roman_number.upper())
-                            roman_number += 1
-                            roman_number = roman.toRoman(roman_number).lower()
-                        else:
-                            tag.name = "li"
-                            text = str(tag)
-                            tag_string = re.sub('^<li[^>]*>(<span.*</span>)?<b>\((xc|xl|l?x{0,3})(ix|iv|v?i{0,3})\)</b>|^<li[^>]*>(<span.*</span>)?\((xc|xl|l?x{0,3})(ix|iv|v?i{0,3})\)|</li>$','', text.strip())
-                            tag.clear()
-                            tag.append(BeautifulSoup(tag_string, features="html.parser"))
-                            tag.wrap(ol_tag_for_roman)
-                            tag['class'] = "roman"
-                            if ol_tag_for_number.li:
-                                id_of_last_li = ol_tag_for_number.find_all("li", class_="number")[-1].attrs['id']
-                            elif ol_tag_for_alphabet.li:
-                                id_of_last_li = ol_tag_for_alphabet.find_all("li", class_="alphabet")[-1].attrs['id']
-                            tag['id'] = f"{id_of_last_li}{roman_number}"
-                            roman_number = roman.fromRoman(roman_number.upper())
-                            roman_number += 1
-                            roman_number = roman.toRoman(roman_number).lower()
-                            if re.search('^“?[a-z A-Z]+',next_tag.text.strip()) or next_tag.next_element.name == "br":  # 5-31.1-1. after 16i 2 break
-                                while re.search("^“?[a-z A-Z]+", next_tag.text.strip()) and next_tag.name!="h4":
-                                    sub_tag = next_tag.find_next_sibling()
-                                    p_tag = self.soup.new_tag("p")
-                                    p_tag.string = next_tag.text
-                                    tag.append(p_tag)
-                                    id_of_last_li = ol_tag_for_roman.find_all("li", class_="roman")[-1].attrs['id']
-                                    p_tag['class'] = next_tag['class']
-                                    p_tag['id'] = f"{id_of_last_li}.{count_of_p_tag}"
-                                    count_of_p_tag += 1
-                                    ol_tag_for_roman.append(tag)
-                                    next_tag.decompose()
-                                    next_tag = sub_tag
-                                count_of_p_tag = 1
-                                while next_tag.next_element.name == "br":
-                                    sub_tag = next_tag.find_next_sibling()
-                                    next_tag.decompose()
-                                    next_tag = sub_tag
-                            if re.search(f'^\({number}\)', next_tag.text.strip()):
-                                if ol_tag_for_caps_alphabet.li:
-                                    ol_tag_for_caps_alphabet.find_all("li")[-1].append(ol_tag_for_roman)
-                                    ol_tag_for_number.find_all("li", class_="number")[-1].append(
-                                        ol_tag_for_caps_alphabet)
-                                    ol_tag_for_caps_alphabet = self.soup.new_tag("ol", type="A")
-                                    caps_alpha = 'A'
-                                    ol_tag_for_roman = self.soup.new_tag("ol", type="i")
-                                    roman_number = 'i'
-                                elif ol_tag_for_number.li:
-                                    ol_tag_for_number.find_all("li", class_="number")[-1].append(ol_tag_for_roman)
-                                    ol_tag_for_roman = self.soup.new_tag("ol", type="i")
-                                    roman_number = 'i'
-                            elif re.search(f'^\({alphabet}{alphabet}?\)', next_tag.text.strip()):
-                                if ol_tag_for_number.li:  # a 1 i
-                                    ol_tag_for_number.find_all("li", class_="number")[-1].append(ol_tag_for_roman)
-                                    ol_tag_for_alphabet.find_all("li", class_="alphabet")[-1].append(
-                                        ol_tag_for_number)
-                                    ol_tag_for_roman = self.soup.new_tag("ol", type="i")
-                                    roman_number = 'i'
-                                    ol_tag_for_number = self.soup.new_tag("ol")
-                                    number = 1
-                                elif ol_tag_for_alphabet.li:  # a i
-                                    ol_tag_for_alphabet.find_all("li", class_="alphabet")[-1].append(
-                                        ol_tag_for_roman)
-                                    ol_tag_for_roman = self.soup.new_tag("ol", type="i")
-                                    roman_number = 'i'
-                    elif re.search(f'^\({inner_roman}\)', tag.text.strip()):
-                        tag.name = "li"
-                        text = str(tag)
-                        tag_string = re.sub('^<li[^>]*>(<span.*</span>)?<b>\((xc|xl|l?x{0,3})(ix|iv|v?i{0,3})\)</b>|^<li[^>]*>(<span.*</span>)?\((xc|xl|l?x{0,3})(ix|iv|v?i{0,3})\)|</li>$','', text.strip())
-                        tag.clear()
-                        tag.append(BeautifulSoup(tag_string, features="html.parser"))
-                        tag.wrap(ol_tag_for_inner_roman)
-                        if ol_tag_for_inner_number.li:
-                            id_of_last_li = ol_tag_for_inner_number.find_all("li",class_="inner_num")[-1].attrs['id']
-                        elif ol_tag_for_caps_alphabet.li:
-                            id_of_last_li = ol_tag_for_caps_alphabet.find_all("li")[-1].attrs['id']
-                        tag['id'] = f"{id_of_last_li}{inner_roman}"
-                        inner_roman = roman.fromRoman(inner_roman.upper())
-                        inner_roman += 1
-                        inner_roman = roman.toRoman(inner_roman).lower()
-                        if re.search(f'^\({number}\)', next_tag.text.strip()):
-                            if ol_tag_for_inner_number.li:
-                                ol_tag_for_inner_number.find_all("li",class_="inner_num")[-1].append(ol_tag_for_inner_roman)
-                                ol_tag_for_inner_roman = self.soup.new_tag("ol", type="i")
-                                inner_roman = 'i'
-                                ol_tag_for_number.find_all("li",class_="number")[-1].append(ol_tag_for_inner_number)
-                                ol_tag_for_inner_number=self.soup.new_tag("ol")
-                                inner_num=1
-                            elif ol_tag_for_caps_alphabet.li:
-                                ol_tag_for_caps_alphabet.find_all("li")[-1].append(ol_tag_for_inner_roman)
-                                ol_tag_for_inner_roman = self.soup.new_tag("ol", type="i")
-                                inner_roman = 'i'
-                        elif re.search(f'^\({inner_num}\)',next_tag.text.strip()):
-                            if ol_tag_for_inner_number.li:
-                                ol_tag_for_inner_number.find_all("li",class_="inner_num")[-1].append(ol_tag_for_inner_roman)
-                                ol_tag_for_inner_roman = self.soup.new_tag("ol", type="i")
-                                inner_roman = 'i'
-                        elif re.search(f'^\({caps_alpha}\)', next_tag.text.strip()):
-                            if ol_tag_for_inner_number.li:
-                                ol_tag_for_inner_number.find_all("li",class_="inner_num")[-1].append(ol_tag_for_inner_roman)
-                                if ol_tag_for_caps_alphabet.li:
-                                    ol_tag_for_caps_alphabet.find_all("li")[-1].append(ol_tag_for_inner_number)
-                                ol_tag_for_inner_roman = self.soup.new_tag("ol", type="i")
-                                ol_tag_for_inner_number = self.soup.new_tag("ol")
-                                inner_roman = 'i'
-                                inner_num = 1
-                            elif ol_tag_for_caps_alphabet.li:
-                                ol_tag_for_caps_alphabet.find_all("li")[-1].append(ol_tag_for_inner_roman)
-                                ol_tag_for_inner_roman = self.soup.new_tag("ol", type="i")
-                                inner_roman = 'i'
-                        else:
-                            continue
                     elif re.search(f'^\({number}\)', tag.text.strip()):
                         if re.search(f'^\({number}\) \({roman_number}\) \({caps_alpha}\)', tag.text.strip()):
                             tag.name = "li"
@@ -1046,7 +1045,7 @@ class UnstructuredHtmlToStructuredHtml:
                             else:
                                 tag.wrap(ol_tag_for_number)
                             number += 1
-                            if re.search('Section \d+', next_tag.text.strip()):
+                            if re.search('^Section \d+', next_tag.text.strip()):
                                 if ol_tag_for_alphabet.li:
                                     ol_tag_for_alphabet.find_all("li", class_="alphabet")[-1].append(ol_tag_for_number)
                                     ol_tag_for_alphabet = self.soup.new_tag("ol", type="a")
@@ -1175,6 +1174,22 @@ class UnstructuredHtmlToStructuredHtml:
                         tag['class'] = "alphabet"
                         ol_tag_for_alphabet = self.soup.new_tag("ol", type="a")
                         alphabet = 'a'
+                    elif re.search(f'^\({inner_alphabet}\)',tag.text.strip()):
+                        tag.name = "li"
+                        text = str(tag)
+                        tag_string = re.sub(
+                            '^<li[^>]*>(<span.*</span>)?<b>\([a-z]+\)</b>|^<li[^>]*>(<span.*</span>)?\([a-z]+\)|</li>$',
+                            '', text.strip())
+                        tag.clear()
+                        tag.append(BeautifulSoup(tag_string, features="html.parser"))
+                        tag.wrap(ol_tag_for_inner_alphabet)
+                        number_id = ol_tag_for_number.find_all("li", class_="number")[-1].attrs['id']
+                        tag.attrs['id'] = f"{number_id}{inner_alphabet}"
+                        ol_tag_for_number.find_all("li",class_="number")[-1].append(ol_tag_for_inner_alphabet)
+                        ol_tag_for_inner_alphabet = self.soup.new_tag("ol", type="a")
+                        inner_alphabet = 'a'
+                        ol_tag_for_number=self.soup.new_tag("ol")
+                        number=1
                     elif re.search(f'^\({roman_number}\)', tag.text.strip()):
                         tag.name = "li"
                         text = str(tag)
@@ -1412,10 +1427,10 @@ class UnstructuredHtmlToStructuredHtml:
 
     def remove_class_name(self):
         for tag in self.soup.find_all():
-            if tag.name not in ["ul", "li","h2","p"] :
+            if tag.name not in ["ul","li","h2","p","cite"] :
                 del tag['class']
-            if tag.name in["ul","li","h2","p"]:
-                if tag['class'] not in ["chapter","leaders","transformation"]:
+            if tag.name in["ul","h2","p","li"]:
+                if tag['class'] not in ["chapter","leaders","transformation","nav_li","notes_section"]:
                     del tag['class']
 
     def remove_from_head(self):
@@ -1442,13 +1457,20 @@ class UnstructuredHtmlToStructuredHtml:
         meta_tag_for_water_mark.attrs['content'] = "Release 70 of the Official Code of Rhode Island Annotated released 2021.11.Transformed and posted by Public.Resource.Org using rtf-parser.py version 1.0 on 2022-06-13.This document is not subject to copyright and is in the public domain."
         self.soup.head.append(meta_tag)
         self.soup.head.append(meta_tag_for_water_mark)
+    
+    def cleanup(self):
+        for tag in self.soup.find_all(["p","span"]):
+            if not tag.text:
+                tag.decompose()
 
     def write_to_file(self):
-        file_write = open("/home/mis/PycharmProjects/practice/venv/ricode/modified/gov.ri.code.title.05.html", "w")
-        file_write.write(self.soup.prettify())
+        file_write = open("/home/mis/PycharmProjects/practice/venv/ricode/modified/gov.ri.code.title.06A.html", "w")
+        soup_text=str(self.soup.prettify())
+        soup_text=soup_text.replace('/>',' />')
+        soup_text = re.sub('&(!?amp;)', '&amp;', soup_text)
+        file_write.write(soup_text)
 
-
-html_file = "/home/mis/PycharmProjects/practice/venv/ricode/raw/gov.ri.code.title.05.html"
+html_file = "/home/mis/PycharmProjects/practice/venv/ricode/raw/gov.ri.code.title.06A.html"
 unstructured_to_structured_html = UnstructuredHtmlToStructuredHtml()
 unstructured_to_structured_html.create_soup(html_file)
 unstructured_to_structured_html.get_class_name()
@@ -1463,4 +1485,5 @@ unstructured_to_structured_html.remove_class_name()
 unstructured_to_structured_html.remove_from_head()
 unstructured_to_structured_html.adding_css_to_file()
 unstructured_to_structured_html.add_watermark()
+unstructured_to_structured_html.cleanup()
 unstructured_to_structured_html.write_to_file()
