@@ -326,8 +326,7 @@ class RIParseHtml(ParseHtml, RegexPatterns):
                 if next_tag.next_element.name and next_tag.next_element.name == 'br':
                     next_tag.decompose()
                     next_tag = tag.find_next_sibling()
-                if re.search('Appear in the agreement under the conspicuous captio', tag.text.strip()):
-                    print()
+
                 if re.search(fr'^\([gk]\)', tag.text.strip()) and self.input_file_name == "gov.ri.code.title.19.html" and tag.find_previous_sibling().get('class') == "h3_part":
                     alphabet = re.search(fr'^\((?P<alpha_id>[gk])\)', tag.text.strip()).group('alpha_id')
                     if alphabet == "g":
@@ -1310,14 +1309,12 @@ class RIParseHtml(ParseHtml, RegexPatterns):
                         roman_number = roman.fromRoman(roman_number.upper())
                         roman_number += 1
                         roman_number = roman.toRoman(roman_number).lower()
-                        while next_tag.name != "h4" and next_tag.name != "h3" and (re.search(r'^“?[a-z A-Z]+|^\[[A-Z a-z]+|^\((xc|xl|l?x{0,3})(ix|iv|v?i{0,3})\)|^\([A-Z]+\)|^\([0-9]+\)|^\([a-z]+\)', next_tag.text.strip()) or (next_tag.next_element and next_tag.next_element.name == "br")):
+                        while next_tag.name != "h4" and next_tag.name != "h3" and (re.search(r'^“?[a-z A-Z]+|^\([\w ]{4,}|^\[[A-Z a-z]+|^\((xc|xl|l?x{0,3})(ix|iv|v?i{0,3})\)|^\([A-Z]+\)|^\([0-9]+\)|^\([a-z]+\)', next_tag.text.strip()) or (next_tag.next_element and next_tag.next_element.name == "br")):
                             if next_tag.next_element.name == "br" or next_tag.get('class') == [self.tag_type_dict["junk1"]]:
                                 next_tag = self.decompose_tag(next_tag)
-                            elif re.search(r"^“?[a-z A-Z]+|^\[[A-Z a-z]+|^\((xc|xl|l?x{0,3})(ix|iv|v?i{0,3})\)|^\([A-Z]+\)|^\([a-z]+\)|^\([0-9]+\)", next_tag.text.strip()):
+                            elif re.search(r"^“?[a-z A-Z]+|^\([\w ]{4,}|^\[[A-Z a-z]+|^\((xc|xl|l?x{0,3})(ix|iv|v?i{0,3})\)|^\([A-Z]+\)|^\([a-z]+\)|^\([0-9]+\)", next_tag.text.strip()):
                                 if re.search(fr'^{inner_alphabet}{inner_alphabet}?\.', next_tag.text.strip()):
                                     break
-                                elif re.search(r"^“?[a-z A-Z]+|^\[[A-Z a-z]+", next_tag.text.strip()):
-                                    next_tag, count_of_p_tag = self.add_p_tag_to_li(tag, next_tag, count_of_p_tag)
                                 elif re.search(r'^\((xc|xl|l?x{0,3})(ix|iv|v?i{0,3})\)', next_tag.text.strip()):
                                     roman_id = re.search(r'^\((?P<roman_id>(xc|xl|l?x{0,3})(ix|iv|v?i{0,3}))\)',
                                                          next_tag.text.strip()).group('roman_id')
@@ -1325,14 +1322,17 @@ class RIParseHtml(ParseHtml, RegexPatterns):
                                         next_tag, count_of_p_tag = self.add_p_tag_to_li(tag, next_tag, count_of_p_tag)
                                     else:
                                         break
-                                elif re.search(r"^\([A-Z]+\)", next_tag.text.strip()):
+                                elif re.search(r"^“?[a-z A-Z]+|^\[[A-Z a-z]+|^\([\w ]{4,}", next_tag.text.strip()):
+                                    next_tag, count_of_p_tag = self.add_p_tag_to_li(tag, next_tag, count_of_p_tag)
+
+                                elif re.search(r"^\([A-Z]{1,2}\)", next_tag.text.strip()):
                                     alpha_id = re.search(r"^\((?P<alpha_id>[A-Z]+)\)", next_tag.text.strip()).group(
                                         'alpha_id')
                                     if alpha_id[0] != caps_alpha and alpha_id != caps_roman and alpha_id != inner_caps_roman:
                                         next_tag, count_of_p_tag = self.add_p_tag_to_li(tag, next_tag, count_of_p_tag)
                                     else:
                                         break
-                                elif re.search(r"^\([a-z]+\)", next_tag.text.strip()):
+                                elif re.search(r"^\([a-z]{1,2}\)", next_tag.text.strip()):
                                     alpha_id = re.search(r"^\((?P<alpha_id>[a-z]+)\)", next_tag.text.strip()).group(
                                         'alpha_id')
                                     if alpha_id[0] != alphabet and alpha_id[0] != inner_alphabet:
@@ -1521,7 +1521,7 @@ class RIParseHtml(ParseHtml, RegexPatterns):
                             li_tag.wrap(ol_tag_for_alphabet)
                             number += 1
                             alphabet = chr(ord(alphabet) + 1)
-                            while (re.search("^[a-z A-Z]+",
+                            while (re.search(r"^[a-z A-Z]+|^\([\w ]{4,}",
                                              next_tag.text.strip()) or next_tag.next_element.name == "br") and next_tag.name != "h4" and next_tag.name != "h3":
                                 if next_tag.next_element.name == "br" or next_tag.get('class') == [self.tag_type_dict["junk1"]]:
                                     next_tag = self.decompose_tag(next_tag)
@@ -1687,6 +1687,7 @@ class RIParseHtml(ParseHtml, RegexPatterns):
                                     alphabet = 'a'
                                     ol_count = 1
                         else:
+
                             tag.name = "li"
                             tag.string = re.sub(fr'^\({alphabet}{alphabet}?\)', '', tag.text.strip())
                             tag.attrs['id'] = f"{tag.find_previous({'h5', 'h4', 'h3', }).get('id')}ol{ol_count}{alpha_id}"
@@ -1698,7 +1699,7 @@ class RIParseHtml(ParseHtml, RegexPatterns):
                             tag['class'] = "alphabet"
                             while (next_tag.name != "h4" and next_tag.name != "h3" and not re.search(
                                     r'^ARTICLE [IVXCL]+^ARTICLE [IVXCL]+|^Section \d+|^[IVXCL]+. Purposes\.|^Part [IVXCL]+',
-                                    next_tag.text.strip(), re.IGNORECASE)) and (re.search(r'^“?(\*\*)?[a-z A-Z]+|^\(Address\)|^\(Landowner.*\)|^\(Summons\)|^_______________|^\[[A-Z a-z]+|^\(Name .*\)|^\([0-9]+\)', next_tag.text.strip()) or (next_tag.next_element and next_tag.next_element.name == "br")):
+                                    next_tag.text.strip(), re.IGNORECASE)) and (re.search(r'^“?(\*\*)?[a-z A-Z]+|^\(Address\)|^\(Landowner.*\)|^\(Summons\)|^_______________|^\[[A-Z a-z]+|^\(Name .*\)|^\([0-9]+\)|^\([\w ]{4,}', next_tag.text.strip()) or (next_tag.next_element and next_tag.next_element.name == "br")):
                                 if next_tag.next_element.name == "br" or next_tag.get('class') == [self.tag_type_dict["junk1"]]:
                                     next_tag = self.decompose_tag(next_tag)
                                 elif re.search(fr'^\([0-9]+\)', next_tag.text.strip()):
@@ -1708,7 +1709,7 @@ class RIParseHtml(ParseHtml, RegexPatterns):
                                         next_tag, count_of_p_tag = self.add_p_tag_to_li(tag, next_tag, count_of_p_tag)
                                     else:
                                         break
-                                elif re.search(r'^\([a-z]+\)', next_tag.text.strip()):
+                                elif re.search(r'^\([a-z]{1,2}\)', next_tag.text.strip()):
                                     alphabet_id = re.search(r'^\((?P<alphabet_id>([a-z]+))\)',
                                                             next_tag.text.strip()).group('alphabet_id')
                                     if alphabet_id[0] != alphabet and alphabet_id[0] != inner_alphabet and alphabet_id != roman_number and alphabet_id != inner_roman:
