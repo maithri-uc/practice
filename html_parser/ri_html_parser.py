@@ -1657,7 +1657,7 @@ class RIParseHtml(ParseHtml, RegexPatterns):
                                 tag['class'] = "alphabet"
                                 while (next_tag.name != "h4" and next_tag.name != "h3" and not re.search(
                                         r'^ARTICLE [IVXCL]+|^Section \d+|^[IVXCL]+. Purposes\.', next_tag.text.strip(),
-                                        re.IGNORECASE)) and (re.search(r'^“?(\*\*)?[a-z A-Z]+|^\(Address\)|^\(Landowner.*\)|^_______________|^\[[A-Z a-z]+|^\(Name .*\)|^\([0-9]+\)', next_tag.text.strip()) or (next_tag.next_element and next_tag.next_element.name == "br")):
+                                        re.IGNORECASE)) and (re.search(r'^“?(\*\*)?[a-z A-Z]+|^_______________|^\[[A-Z a-z]+|^\([0-9]+\)', next_tag.text.strip()) or (next_tag.next_element and next_tag.next_element.name == "br")):
                                     if next_tag.next_element.name == "br" or next_tag.get('class') == [self.tag_type_dict["junk1"]]:
                                         next_tag = self.decompose_tag(next_tag)
 
@@ -1699,7 +1699,7 @@ class RIParseHtml(ParseHtml, RegexPatterns):
                             tag['class'] = "alphabet"
                             while (next_tag.name != "h4" and next_tag.name != "h3" and not re.search(
                                     r'^ARTICLE [IVXCL]+^ARTICLE [IVXCL]+|^Section \d+|^[IVXCL]+. Purposes\.|^Part [IVXCL]+',
-                                    next_tag.text.strip(), re.IGNORECASE)) and (re.search(r'^“?(\*\*)?[a-z A-Z]+|^\(Address\)|^\(Landowner.*\)|^\(Summons\)|^_______________|^\[[A-Z a-z]+|^\(Name .*\)|^\([0-9]+\)|^\([\w ]{4,}', next_tag.text.strip()) or (next_tag.next_element and next_tag.next_element.name == "br")):
+                                    next_tag.text.strip(), re.IGNORECASE)) and (re.search(r'^“?(\*\*)?[a-z A-Z]+|^_______________|^\[[A-Z a-z]+|^\([0-9]+\)|^\([\w ]{4,}', next_tag.text.strip()) or (next_tag.next_element and next_tag.next_element.name == "br")):
                                 if next_tag.next_element.name == "br" or next_tag.get('class') == [self.tag_type_dict["junk1"]]:
                                     next_tag = self.decompose_tag(next_tag)
                                 elif re.search(fr'^\([0-9]+\)', next_tag.text.strip()):
@@ -2343,6 +2343,9 @@ class RIParseHtml(ParseHtml, RegexPatterns):
 
             if tag.name in ["h2", "h3", "h4"]:
                 ol_count = 1
+        for tag in self.soup.main.find_all(["li","p"]):
+            if (tag.name == "li" and tag['class'] != ["note"]) or (tag.name == "p" and tag['class'] =="text") :
+                del tag["class"]
 
         print('ol tags added')
 
@@ -2462,3 +2465,6 @@ class RIParseHtml(ParseHtml, RegexPatterns):
             elif p_tag.name == "h3" and self.regex_pattern_obj.section_pattern_con.search(p_tag.text.strip()):
                 chap_no = self.regex_pattern_obj.section_pattern_con.search(p_tag.text.strip()).group('id')
                 p_tag['id'] = f'{p_tag.find_previous(["h2","h3"],["oneh2", "gen", "amd"]).get("id")}-s{chap_no.zfill(2)}'
+
+
+
