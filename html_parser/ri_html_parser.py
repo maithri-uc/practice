@@ -48,7 +48,7 @@ class RIParseHtml(ParseHtml, RegexPatterns):
             else:
                 self.h2_order = ['chapter', '', '', '', '']
             self.h2_pattern_text: list = [r'^(?P<tag>C)hapters (?P<id>\d+(\.\d+)?(\.\d+)?([A-Z])?)']
-        self.h4_head: list = ['Compiler’s Notes.', 'Compiler\'s Notes.', 'Compiler\'s Notes', 'Cross References.', 'Subsequent Reenactments.', 'Abridged Life Tables and Tables of Work Life Expectancies.', 'Definitional Cross References.', 'Contingent Effective Dates.', 'Applicability.', 'Comparative Legislation.', 'Sunset Provision.', 'Liberal Construction.', 'Sunset Provisions.', 'Legislative Findings.', 'Contingently Repealed Sections.', 'Transferred Sections.', 'Collateral References.', 'NOTES TO DECISIONS', 'Retroactive Effective Dates.', 'Legislative Intent.', 'Repealed Sections.', 'Effective Dates.', 'Law Reviews.', 'Rules of Court.', 'OFFICIAL COMMENT', 'Superseded Sections.', 'Repeal of Sunset Provision.', 'Legislative Findings and Intent.', 'Official Comment.', 'Official Comments', 'Repealed and Reenacted Sections.', 'COMMISSIONER’S COMMENT', 'Comment.', 'History of Amendment.', 'Ratification.', 'Federal Act References.', 'Reenactments.', 'Severability.', 'Delayed Effective Dates.', 'Delayed Effective Date.', 'Delayed Repealed Sections.']
+        self.h4_head: list = ['Compiler’s Notes.', 'Compiler\'s Notes.', 'Variations from Uniform Code.', 'Obsolete Sections.', 'Omitted Sections.', 'Reserved Sections.', 'Compiler\'s Notes', 'Cross References.', 'Subsequent Reenactments.', 'Abridged Life Tables and Tables of Work Life Expectancies.', 'Definitional Cross References.', 'Contingent Effective Dates.', 'Applicability.', 'Comparative Legislation.', 'Sunset Provision.', 'Liberal Construction.', 'Sunset Provisions.', 'Legislative Findings.', 'Contingently Repealed Sections.', 'Transferred Sections.', 'Collateral References.', 'NOTES TO DECISIONS', 'Retroactive Effective Dates.', 'Legislative Intent.', 'Repealed Sections.', 'Effective Dates.', 'Law Reviews.', 'Rules of Court.', 'OFFICIAL COMMENT', 'Superseded Sections.', 'Repeal of Sunset Provision.', 'Legislative Findings and Intent.', 'Official Comment.', 'Official Comments', 'Repealed and Reenacted Sections.', 'COMMISSIONER’S COMMENT', 'Comment.', 'History of Amendment.', 'Ratification.', 'Federal Act References.', 'Reenactments.', 'Severability.', 'Delayed Effective Dates.', 'Delayed Effective Date.', 'Delayed Repealed Sections.']
         self.junk_tag_class = ['Apple-converted-space', 'Apple-tab-span']
 
         self.watermark_text = """Release {0} of the Official Code of Rhode Island Annotated released {1}. 
@@ -162,7 +162,11 @@ class RIParseHtml(ParseHtml, RegexPatterns):
                         p_tag.name = "h4"
                         p_tag['id'] = f"{p_tag.find_previous_sibling(['h3', 'h2']).get('id')}-{re.sub(r'[^a-zA-Z0-9]', '', p_tag.text).lower()}"
                     elif re.search(r"^ARTICLE (\d+|[IVXCL]+)", p_tag.text.strip(), re.IGNORECASE):
-                        if re.search(r"^ARTICLE [IVXCL]+\.?[A-Z a-z]+", p_tag.text.strip(), re.IGNORECASE) and p_tag.name != "li":  # article notes to dceision
+                        if re.search(r"^ARTICLE [IVXCL]+\.?$", p_tag.text.strip()):
+                            p_tag.name = "h4"
+                            article_id = re.search(r"^ARTICLE (?P<article_id>([IVXCL]+|\d+))", p_tag.text.strip(),re.IGNORECASE).group('article_id')
+                            p_tag['id'] = f"{p_tag.find_previous_sibling('h3').attrs['id']}a{article_id}"
+                        elif re.search(r"^ARTICLE [IVXCL]+\.?[A-Z\sa-z]+", p_tag.text.strip(), re.IGNORECASE) and p_tag.name != "li":  # article notes to dceision
                             tag_for_article = self.soup.new_tag("h4")
                             article_number = re.search('^(ARTICLE (?P<article_id>[IVXCL]+))', p_tag.text.strip(), re.IGNORECASE)
                             if p_tag.b:
@@ -176,11 +180,11 @@ class RIParseHtml(ParseHtml, RegexPatterns):
                             p_tag.string = tag_text
                             tag_for_article.attrs['class'] = [self.tag_type_dict['history']]
                             tag_for_article['id'] = f"{p_tag.find_previous_sibling('h3').attrs['id']}a{article_number.group('article_id')}"
-                        elif re.search(r'^Article [IVXCL]+\.[A-Z a-z]+', p_tag.text.strip()):
-                            p_tag.name = "h4"
-                            article_number = re.search('^(Article (?P<article_id>[IVXCL]+))', p_tag.text.strip())
-                            p_tag['id'] = f"{p_tag.find_previous_sibling('h3').attrs['id']}a{article_number.group('article_id')}"
-                        elif re.search(r'^Article [IVXCL]+\.', p_tag.text.strip()):
+                        # elif re.search(r'^Article [IVXCL]+\.[A-Z a-z]+', p_tag.text.strip()):
+                        #     p_tag.name = "h4"
+                        #     article_number = re.search('^(Article (?P<article_id>[IVXCL]+))', p_tag.text.strip())
+                        #     p_tag['id'] = f"{p_tag.find_previous_sibling('h3').attrs['id']}a{article_number.group('article_id')}"
+                        elif re.search(r'^Article [IVXCL]+\.$', p_tag.text.strip()):
                             p_tag.name = 'li'
                         elif re.search(r'^Article \d+\.', p_tag.text.strip()):
                             tag_for_article = self.soup.new_tag("h4")
@@ -194,8 +198,10 @@ class RIParseHtml(ParseHtml, RegexPatterns):
                             tag_for_article['id'] = f"{p_tag.find_previous_sibling('h3').attrs['id']}a{article_number.group('article_number')}"
                         else:
                             p_tag.name = "h4"
-                            article_id = re.search(r"^ARTICLE (?P<article_id>([IVXCL]+|\d+))", p_tag.text.strip(), re.IGNORECASE).group('article_id')
+                            article_id = re.search(r"^ARTICLE (?P<article_id>([IVXCL]+|\d+))", p_tag.text.strip(),re.IGNORECASE).group('article_id')
                             p_tag['id'] = f"{p_tag.find_previous_sibling('h3').attrs['id']}a{article_id}"
+                            print(p_tag)
+
                     elif re.search(r"^Section \d+. [a-z ,\-A-Z]+\. \(a\)", p_tag.text.strip()) and re.search(r"^\(b\)", p_tag.find_next_sibling().text.strip()):
                         text_from_b = p_tag.text.split('(a)')
                         p_tag_for_section = self.soup.new_tag("p")
@@ -213,8 +219,8 @@ class RIParseHtml(ParseHtml, RegexPatterns):
                 elif p_tag.get('class') == [self.tag_type_dict["head2"]]:
                     if re.search(r'^Chapters? (?P<id>\d+(\.\d+)?(\.\d+)?([A-Z])?)', p_tag.text.strip()):
                         p_tag.name = "h2"
-                elif p_tag.name == "p" and p_tag.get('class') == [self.tag_type_dict["head4"]]:
-                    if re.search(r'^Cross References\. [a-zA-Z0-9]+|^Definitional Cross References\. [a-z A-Z0-9“]+', p_tag.text.strip()):
+                elif p_tag.get('class') == [self.tag_type_dict["head4"]]:
+                    if re.search(r'^Cross References\.\s+[a-zA-Z0-9]+|^Compiler’s Notes\.\s+[a-zA-Z0-9]+|^Definitional Cross References[.:]\s+[“a-z A-Z0-9]+', p_tag.text.strip()):
                         p_tag, new_tag = self.recreate_tag(p_tag)
                         new_tag.name = "h4"
                         header4_tag_text = re.sub(r'[\W.]+', '', new_tag.text.strip()).lower()
@@ -779,7 +785,7 @@ class RIParseHtml(ParseHtml, RegexPatterns):
                                 caps_alpha = 'A'
                             else:
                                 caps_alpha = chr(ord(caps_alpha) + 1)
-                            while (re.search(r"^“?(\*\*)?[a-z A-Z]+|^\*“?[A-Za-z ]+|^\((ix|iv|v?i{0,3})\)|^\([0-9]\)|^\([A-Z]+\)", next_tag.text.strip()) or next_tag.next_element.name == "br") and next_tag.name != "h4" and next_tag.name != "h3":
+                            while (re.search(r"^“?(\*\*)?[a-z A-Z]+|^\*“?[A-Za-z ]+|^\((ix|iv|v?i{0,3})\)|^\(\d+\)|^\([A-Z]+\)", next_tag.text.strip()) or next_tag.next_element.name == "br") and next_tag.name != "h4" and next_tag.name != "h3":
                                 if next_tag.next_element.name == "br" or next_tag.get('class') == [self.tag_type_dict["junk1"]]:
                                     next_tag = self.decompose_tag(next_tag)
                                 elif re.search(r'^\((ix|iv|v?i{0,3})\)', next_tag.text.strip()):
@@ -797,8 +803,8 @@ class RIParseHtml(ParseHtml, RegexPatterns):
                                         next_tag, count_of_p_tag = self.add_p_tag_to_li(tag, next_tag, count_of_p_tag)
                                     else:
                                         break
-                                elif re.search(r"^\([0-9]\)", next_tag.text.strip()):
-                                    number_id = re.search(r"^\((?P<number_id>[0-9])\)", next_tag.text.strip()).group(
+                                elif re.search(r"^\(\d+\)", next_tag.text.strip()):
+                                    number_id = re.search(r"^\((?P<number_id>\d+)\)", next_tag.text.strip()).group(
                                         'number_id')
                                     if number_id != str(number) and number_id != str(inner_num):
                                         next_tag, count_of_p_tag = self.add_p_tag_to_li(tag, next_tag, count_of_p_tag)
@@ -1309,10 +1315,10 @@ class RIParseHtml(ParseHtml, RegexPatterns):
                         roman_number = roman.fromRoman(roman_number.upper())
                         roman_number += 1
                         roman_number = roman.toRoman(roman_number).lower()
-                        while next_tag.name != "h4" and next_tag.name != "h3" and (re.search(r'^“?[a-z A-Z]+|^\([\w ]{4,}|^\[[A-Z a-z]+|^\((xc|xl|l?x{0,3})(ix|iv|v?i{0,3})\)|^\([A-Z]+\)|^\([0-9]+\)|^\([a-z]+\)', next_tag.text.strip()) or (next_tag.next_element and next_tag.next_element.name == "br")):
+                        while next_tag.name != "h4" and next_tag.name != "h3" and (re.search(r'^“?[a-z A-Z]+|^\([\w ]{4,}|^\[[A-Z a-z]+|^\((xc|xl|l?x{0,3})(ix|iv|v?i{0,3})\)|^\([A-Z]+\)|^\(\d+\)|^\([a-z]+\)', next_tag.text.strip()) or (next_tag.next_element and next_tag.next_element.name == "br")):
                             if next_tag.next_element.name == "br" or next_tag.get('class') == [self.tag_type_dict["junk1"]]:
                                 next_tag = self.decompose_tag(next_tag)
-                            elif re.search(r"^“?[a-z A-Z]+|^\([\w ]{4,}|^\[[A-Z a-z]+|^\((xc|xl|l?x{0,3})(ix|iv|v?i{0,3})\)|^\([A-Z]+\)|^\([a-z]+\)|^\([0-9]+\)", next_tag.text.strip()):
+                            elif re.search(r"^“?[a-z A-Z]+|^\([\w ]{4,}|^\[[A-Z a-z]+|^\((xc|xl|l?x{0,3})(ix|iv|v?i{0,3})\)|^\([A-Z]+\)|^\([a-z]+\)|^\(\d+\)", next_tag.text.strip()):
                                 if re.search(fr'^{inner_alphabet}{inner_alphabet}?\.', next_tag.text.strip()):
                                     break
                                 elif re.search(r'^\((xc|xl|l?x{0,3})(ix|iv|v?i{0,3})\)', next_tag.text.strip()):
@@ -1339,8 +1345,8 @@ class RIParseHtml(ParseHtml, RegexPatterns):
                                         next_tag, count_of_p_tag = self.add_p_tag_to_li(tag, next_tag, count_of_p_tag)
                                     else:
                                         break
-                                elif re.search(r"^\([0-9]+\)", next_tag.text.strip()):
-                                    number_id = re.search(r"^\((?P<number_id>[0-9]+)\)", next_tag.text.strip()).group(
+                                elif re.search(r"^\(\d+\)", next_tag.text.strip()):
+                                    number_id = re.search(r"^\((?P<number_id>\d+)\)", next_tag.text.strip()).group(
                                         'number_id')
                                     if number_id != str(number) and number_id != str(inner_num):
                                         next_tag, count_of_p_tag = self.add_p_tag_to_li(tag, next_tag, count_of_p_tag)
@@ -1657,12 +1663,12 @@ class RIParseHtml(ParseHtml, RegexPatterns):
                                 tag['class'] = "alphabet"
                                 while (next_tag.name != "h4" and next_tag.name != "h3" and not re.search(
                                         r'^ARTICLE [IVXCL]+|^Section \d+|^[IVXCL]+. Purposes\.', next_tag.text.strip(),
-                                        re.IGNORECASE)) and (re.search(r'^“?(\*\*)?[a-z A-Z]+|^_______________|^\[[A-Z a-z]+|^\([0-9]+\)', next_tag.text.strip()) or (next_tag.next_element and next_tag.next_element.name == "br")):
+                                        re.IGNORECASE)) and (re.search(r'^“?(\*\*)?[a-z A-Z]+|^_______________|^\[[A-Z a-z]+|^\(\d+\)', next_tag.text.strip()) or (next_tag.next_element and next_tag.next_element.name == "br")):
                                     if next_tag.next_element.name == "br" or next_tag.get('class') == [self.tag_type_dict["junk1"]]:
                                         next_tag = self.decompose_tag(next_tag)
 
-                                    elif re.search(fr'^\([0-9]+\)', next_tag.text.strip()):
-                                        number_id = re.search(fr'^\((?P<number_id>[0-9]+)\)',
+                                    elif re.search(fr'^\(\d+\)', next_tag.text.strip()):
+                                        number_id = re.search(fr'^\((?P<number_id>\d+)\)',
                                                               next_tag.text.strip()).group('number_id')
                                         if number_id != str(number) and number != str(inner_num):
                                             next_tag, count_of_p_tag = self.add_p_tag_to_li(tag, next_tag,
@@ -1699,11 +1705,11 @@ class RIParseHtml(ParseHtml, RegexPatterns):
                             tag['class'] = "alphabet"
                             while (next_tag.name != "h4" and next_tag.name != "h3" and not re.search(
                                     r'^ARTICLE [IVXCL]+^ARTICLE [IVXCL]+|^Section \d+|^[IVXCL]+. Purposes\.|^Part [IVXCL]+',
-                                    next_tag.text.strip(), re.IGNORECASE)) and (re.search(r'^“?(\*\*)?[a-z A-Z]+|^_______________|^\[[A-Z a-z]+|^\([0-9]+\)|^\([\w ]{4,}', next_tag.text.strip()) or (next_tag.next_element and next_tag.next_element.name == "br")):
+                                    next_tag.text.strip(), re.IGNORECASE)) and (re.search(r'^“?(\*\*)?[a-z A-Z]+|^_______________|^\[[A-Z a-z]+|^\(\d+\)|^\([\w ]{4,}', next_tag.text.strip()) or (next_tag.next_element and next_tag.next_element.name == "br")):
                                 if next_tag.next_element.name == "br" or next_tag.get('class') == [self.tag_type_dict["junk1"]]:
                                     next_tag = self.decompose_tag(next_tag)
-                                elif re.search(fr'^\([0-9]+\)', next_tag.text.strip()):
-                                    number_id = re.search(fr'^\((?P<number_id>[0-9]+)\)', next_tag.text.strip()).group(
+                                elif re.search(fr'^\(\d+\)', next_tag.text.strip()):
+                                    number_id = re.search(fr'^\((?P<number_id>\d+)\)', next_tag.text.strip()).group(
                                         'number_id')
                                     if number_id != str(number) and number != str(inner_num):
                                         next_tag, count_of_p_tag = self.add_p_tag_to_li(tag, next_tag, count_of_p_tag)
@@ -1782,15 +1788,15 @@ class RIParseHtml(ParseHtml, RegexPatterns):
                             tag.attrs['id'] = f"{id_of_alpha}{inner_alphabet}"
                             tag['class'] = "inner_alpha"
                             inner_alphabet = chr(ord(inner_alphabet) + 1)
-                            while (re.search(r'^“?[a-z A-Z]+|^\([0-9]+\)', next_tag.text.strip()) or (
+                            while (re.search(r'^“?[a-z A-Z]+|^\(\d+\)', next_tag.text.strip()) or (
                                     next_tag.next_element and next_tag.next_element.name == "br")) and next_tag.name != "h4" and next_tag.name != "h3":
                                 if next_tag.next_element.name == "br" or next_tag.get('class') == [self.tag_type_dict["junk1"]]:
                                     next_tag = self.decompose_tag(next_tag)
                                 elif re.search("^“?[a-z A-Z]+",
                                                next_tag.text.strip()) and next_tag.name != "h4" and next_tag.name != "h3":
                                     next_tag, count_of_p_tag = self.add_p_tag_to_li(tag, next_tag, count_of_p_tag)
-                                elif re.search(r"^\([0-9]+\)", next_tag.text.strip()):
-                                    number_id = re.search(r"^\((?P<number_id>[0-9]+)\)", next_tag.text.strip()).group(
+                                elif re.search(r"^\(\d+\)", next_tag.text.strip()):
+                                    number_id = re.search(r"^\((?P<number_id>\d+)\)", next_tag.text.strip()).group(
                                         'number_id')
                                     if number_id != str(number) and number_id != str(inner_num):
                                         next_tag, count_of_p_tag = self.add_p_tag_to_li(tag, next_tag, count_of_p_tag)
@@ -1982,14 +1988,14 @@ class RIParseHtml(ParseHtml, RegexPatterns):
                             number += 1
 
                             while next_tag.name != "h4" and next_tag.name != "h3" and (
-                                    re.search(r'^“?[a-z A-Z]+|^\([0-9]\)', next_tag.text.strip()) or (
+                                    re.search(r'^“?[a-z A-Z]+|^\(\d+\)', next_tag.text.strip()) or (
                                     next_tag.next_element and next_tag.next_element.name == "br")):
                                 if next_tag.next_element.name == "br" or next_tag.get('class') == [self.tag_type_dict["junk1"]]:
                                     next_tag = self.decompose_tag(next_tag)
                                 elif re.search("^“?[a-z A-Z]+", next_tag.text.strip()):
                                     next_tag, count_of_p_tag = self.add_p_tag_to_li(tag, next_tag, count_of_p_tag)
-                                elif re.search(r"^\([0-9]\)", next_tag.text.strip()):
-                                    number_id = re.search(r"^\((?P<number_id>[0-9])\)", next_tag.text.strip()).group(
+                                elif re.search(r"^\(\d+\)", next_tag.text.strip()):
+                                    number_id = re.search(r"^\((?P<number_id>\d+)\)", next_tag.text.strip()).group(
                                         'number_id')
                                     if number_id != str(number) and number_id != str(inner_num):
                                         next_tag, count_of_p_tag = self.add_p_tag_to_li(tag, next_tag, count_of_p_tag)
@@ -2045,7 +2051,6 @@ class RIParseHtml(ParseHtml, RegexPatterns):
                                 number = 1
                                 inner_alphabet = 'a'
                     elif re.search(fr'^\({number}\) \({caps_alpha}{caps_alpha}?\)', tag.text.strip()):
-
                         caps_alpha_id = re.search(fr'\((?P<caps_alpha_id>{caps_alpha}{caps_alpha}?)\)',
                                                   tag.text.strip()).group('caps_alpha_id')
                         if re.search('[IVX]+', caps_alpha_id):
@@ -2090,11 +2095,11 @@ class RIParseHtml(ParseHtml, RegexPatterns):
                             tag.wrap(ol_tag_for_number)
                         number += 1
                         while next_tag.name != "h4" and next_tag.name != "h5" and next_tag.name != "h3" and (re.search(
-                                r"^\([\w ]{4,}|^“\([A-Z a-z]+\)|^\. \. \.|^\[[A-Z a-z]+|^“?[a-z A-Z]+|^_______________|^\((ix|iv|v?i{0,3})\)|^\([0-9]\)|^\([a-z]+\)|^\([A-Z ]+\)",
+                                r"^\([\w ]{4,}|^“\([A-Z a-z]+\)|^\. \. \.|^\[[A-Z a-z]+|^“?[a-z A-Z]+|^_______________|^\((ix|iv|v?i{0,3})\)|^\(\d+\)|^\([a-z]+\)|^\([A-Z ]+\)",
                                 next_tag.text.strip()) or (next_tag.next_element and next_tag.next_element.name == "br")):
                             if next_tag.next_element.name == "br" or next_tag.get('class') == [self.tag_type_dict["junk1"]]:
                                 next_tag = self.decompose_tag(next_tag)
-                            elif re.search(r"^\([\w ]{4,}|^“\([A-Z a-z]+\)|^_______________|^\. \. \.|^\([a-z]+\)|^“?[a-z A-Z]+|^\[[A-Z a-z]+|^\([0-9]+\)|^\((ix|iv|v?i{0,3})\)|^\([A-Z ]+\) ", next_tag.text.strip()):
+                            elif re.search(r"^\([\w ]{4,}|^“\([A-Z a-z]+\)|^_______________|^\. \. \.|^\([a-z]+\)|^“?[a-z A-Z]+|^\[[A-Z a-z]+|^\(\d+\)|^\((ix|iv|v?i{0,3})\)|^\([A-Z ]+\) ", next_tag.text.strip()):
                                 if re.search(r'^Section \d+', next_tag.text.strip()):
                                     break
                                 elif re.search(r'^\([a-z]{1,2}\)', next_tag.text.strip()):
@@ -2108,8 +2113,8 @@ class RIParseHtml(ParseHtml, RegexPatterns):
                                         r"^\([\w ]{4,}|^“\([A-Z a-z]+\)|^_______________|^\. \. \.|^\[[A-Z a-z]+|^“?[a-z A-Z]+",
                                         next_tag.text.strip()):
                                     next_tag, count_of_p_tag = self.add_p_tag_to_li(tag, next_tag, count_of_p_tag)
-                                elif re.search(r'^\([0-9]+\)', next_tag.text.strip()):
-                                    number_id = re.search(r'^\((?P<number_id>([0-9]+))\)', next_tag.text.strip()).group(
+                                elif re.search(r'^\(\d+\)', next_tag.text.strip()):
+                                    number_id = re.search(r'^\((?P<number_id>(\d+))\)', next_tag.text.strip()).group(
                                         'number_id')
                                     if number_id != str(number) and number_id != str(inner_num):
                                         next_tag, count_of_p_tag = self.add_p_tag_to_li(tag, next_tag, count_of_p_tag)
@@ -2338,13 +2343,26 @@ class RIParseHtml(ParseHtml, RegexPatterns):
                                 inner_num = 1
                                 ol_count = 1
 
-            if re.search(r'^\([a-zA-Z0-9]+\)', tag.text.strip()):
-                print(tag)
-
             if tag.name in ["h2", "h3", "h4"]:
                 ol_count = 1
+            # if tag.name == "p" and re.search(r'^\([a-zA-Z0-9]+\)', tag.text.strip()):
+            #     print(tag)
+        # for tag in self.soup.find_all("p"):
+            # class_name = tag['class'][0]
+            # if tag.name == "p" and (class_name == self.tag_type_dict['history'] or class_name == self.tag_type_dict['ol_of_i'] or class_name == self.tag_type_dict['head4'] )and re.search(r'^[A-Za-z0-9]\.|^“?\([A-Z a-z0-9]+\)|^\([\w ]{4,}|^\. \. \.|^\[[A-Z a-z]+|^“?(\*\*)?[a-z A-Z]+|^\*“?[A-Za-z ]+|^_______________|^“?[a-z A-Z]+', tag.text.strip()) and not tag.has_attr('id') and not re.search('(Mass\.|U\.S\.|^Conn\.|N\.E\.|P.L. \d+|G\.\s?L\.|C\.I\.F\.|^[a-zA-Z0-9 ]+|R\.I\.|P\.S\.|G\.S\.|B\. Mitchell|Y\.M\.C\.A\.|A\.L\.R\.)', tag.text.strip()):
+            #     print(tag)
+        # l=[]
+        # for tag in self.soup.main.find_all():
+        #     if tag.has_attr('id') and tag['id'] not in l:
+        #         l.append((tag['id']).lower())
+        #     elif tag.has_attr('id') and tag['id'] in l:
+        #         print('duplicate:{0}', tag['id'])
+        # print(l)
+        #     if tag.get('class') == [self.tag_type_dict["head4"]] and not tag.has_attr('id')and tag.b and not re.search(
+        #             '^Mass\.|^Conn\.|P\.L\.|"^\([A-Za-z0-9]\)', tag.text.strip()):
+        #         print(tag)
         for tag in self.soup.main.find_all(["li","p"]):
-            if (tag.name == "li" and tag['class'] != ["note"]) or (tag.name == "p" and tag['class'] =="text") :
+            if (tag.name == "li" and tag['class'] != "note") or (tag.name == "p" and tag['class'] == "text") :
                 del tag["class"]
 
         print('ol tags added')
@@ -2465,6 +2483,3 @@ class RIParseHtml(ParseHtml, RegexPatterns):
             elif p_tag.name == "h3" and self.regex_pattern_obj.section_pattern_con.search(p_tag.text.strip()):
                 chap_no = self.regex_pattern_obj.section_pattern_con.search(p_tag.text.strip()).group('id')
                 p_tag['id'] = f'{p_tag.find_previous(["h2","h3"],["oneh2", "gen", "amd"]).get("id")}-s{chap_no.zfill(2)}'
-
-
-
