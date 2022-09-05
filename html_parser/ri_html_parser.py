@@ -319,10 +319,6 @@ class RIParseHtml(ParseHtml, RegexPatterns):
                 continue
             class_name = tag['class'][0]
             if class_name == self.tag_type_dict['history'] or class_name == self.tag_type_dict['ol_of_i'] or class_name == self.tag_type_dict['head4']:
-                if re.search("^“?[a-z A-Z]+", tag.text.strip()):
-                    next_sibling = tag.find_next_sibling()
-                    if next_sibling and tag.name == "h3":
-                        ol_count = 1
                 if tag.i:
                     tag.i.unwrap()
                 next_tag = tag.find_next_sibling()
@@ -2355,7 +2351,7 @@ class RIParseHtml(ParseHtml, RegexPatterns):
         #     if tag.has_attr('id') and tag['id'] not in l:
         #         l.append((tag['id']).lower())
         #     elif tag.has_attr('id') and tag['id'] in l:
-        #         print('duplicate:',tag['id'])
+        #         print('duplicate:', tag['id'])
 
         # print(l)
         #     if tag.get('class') == [self.tag_type_dict["head4"]] and not tag.has_attr('id')and tag.b and not re.search(
@@ -2364,6 +2360,11 @@ class RIParseHtml(ParseHtml, RegexPatterns):
         for tag in self.soup.main.find_all(["li", "p"]):
             if (tag.name == "li" and tag['class'] != "note") or (tag.name == "p" and tag['class'] == "text"):
                 del tag["class"]
+            if tag.name == "p" and not tag.text:
+                tag.decompose()
+        for tag in self.soup.find_all("p"):
+            if re.search(r'^\(([A-Za-z]+|\d+)\)',tag.text.strip()):
+                print(tag)
 
         print('ol tags added')
 
