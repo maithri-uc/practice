@@ -48,7 +48,7 @@ class RIParseHtml(ParseHtml, RegexPatterns):
             else:
                 self.h2_order = ['chapter', '', '', '', '']
             self.h2_pattern_text: list = [r'^(?P<tag>C)hapters (?P<id>\d+(\.\d+)?(\.\d+)?([A-Z])?)']
-        self.h4_head: list = ['Compiler’s Notes.', 'Compiler\'s Notes.', 'Variations from Uniform Code.', 'Obsolete Sections.', 'Omitted Sections.', 'Reserved Sections.', 'Compiler\'s Notes', 'Cross References.', 'Subsequent Reenactments.', 'Abridged Life Tables and Tables of Work Life Expectancies.', 'Definitional Cross References.', 'Contingent Effective Dates.', 'Applicability.', 'Comparative Legislation.', 'Sunset Provision.', 'Liberal Construction.', 'Sunset Provisions.', 'Legislative Findings.', 'Contingently Repealed Sections.', 'Transferred Sections.', 'Collateral References.', 'NOTES TO DECISIONS', 'Retroactive Effective Dates.', 'Legislative Intent.', 'Repealed Sections.', 'Effective Dates.', 'Law Reviews.', 'Rules of Court.', 'OFFICIAL COMMENT', 'Superseded Sections.', 'Repeal of Sunset Provision.', 'Legislative Findings and Intent.', 'Official Comment.', 'Official Comments', 'Repealed and Reenacted Sections.', 'COMMISSIONER’S COMMENT', 'Comment.', 'History of Amendment.', 'Ratification.', 'Federal Act References.', 'Reenactments.', 'Severability.', 'Delayed Effective Dates.', 'Delayed Effective Date.', 'Delayed Repealed Sections.']
+        self.h4_head: list = ['Compiler’s Notes.', 'History of Section', 'Compiler\'s Notes.', 'Variations from Uniform Code.', 'Comparative Provisions.', 'Obsolete Sections.', 'Omitted Sections.', 'Reserved Sections.', 'Compiler\'s Notes', 'Cross References.', 'Subsequent Reenactments.', 'Abridged Life Tables and Tables of Work Life Expectancies.', 'Definitional Cross References.', 'Contingent Effective Dates.', 'Applicability.', 'Comparative Legislation.', 'Sunset Provision.', 'Liberal Construction.', 'Sunset Provisions.', 'Legislative Findings.', 'Contingently Repealed Sections.', 'Transferred Sections.', 'Collateral References.', 'NOTES TO DECISIONS', 'Retroactive Effective Dates.', 'Legislative Intent.', 'Repealed Sections.', 'Effective Dates.', 'Law Reviews.', 'Rules of Court.', 'OFFICIAL COMMENT', 'Superseded Sections.', 'Repeal of Sunset Provision.', 'Legislative Findings and Intent.', 'Official Comment.', 'Official Comments', 'Repealed and Reenacted Sections.', 'COMMISSIONER’S COMMENT', 'Comment.', 'History of Amendment.', 'Ratification.', 'Federal Act References.', 'Reenactments.', 'Severability.', 'Delayed Effective Dates.', 'Delayed Effective Date.', 'Delayed Repealed Sections.']
         self.junk_tag_class = ['Apple-converted-space', 'Apple-tab-span']
 
         self.watermark_text = """Release {0} of the Official Code of Rhode Island Annotated released {1}. 
@@ -164,7 +164,7 @@ class RIParseHtml(ParseHtml, RegexPatterns):
                     elif re.search(r"^ARTICLE (\d+|[IVXCL]+)", p_tag.text.strip(), re.IGNORECASE):
                         if re.search(r"^ARTICLE [IVXCL]+\.?$", p_tag.text.strip()):
                             p_tag.name = "h4"
-                            article_id = re.search(r"^ARTICLE (?P<article_id>([IVXCL]+|\d+))", p_tag.text.strip(),re.IGNORECASE).group('article_id')
+                            article_id = re.search(r"^ARTICLE (?P<article_id>([IVXCL]+|\d+))", p_tag.text.strip(), re.IGNORECASE).group('article_id')
                             p_tag['id'] = f"{p_tag.find_previous_sibling('h3').attrs['id']}a{article_id}"
                         elif re.search(r"^ARTICLE [IVXCL]+\.?[A-Z\sa-z]+", p_tag.text.strip(), re.IGNORECASE) and p_tag.name != "li":  # article notes to dceision
                             tag_for_article = self.soup.new_tag("h4")
@@ -198,9 +198,8 @@ class RIParseHtml(ParseHtml, RegexPatterns):
                             tag_for_article['id'] = f"{p_tag.find_previous_sibling('h3').attrs['id']}a{article_number.group('article_number')}"
                         else:
                             p_tag.name = "h4"
-                            article_id = re.search(r"^ARTICLE (?P<article_id>([IVXCL]+|\d+))", p_tag.text.strip(),re.IGNORECASE).group('article_id')
+                            article_id = re.search(r"^ARTICLE (?P<article_id>([IVXCL]+|\d+))", p_tag.text.strip(), re.IGNORECASE).group('article_id')
                             p_tag['id'] = f"{p_tag.find_previous_sibling('h3').attrs['id']}a{article_id}"
-                            print(p_tag)
 
                     elif re.search(r"^Section \d+. [a-z ,\-A-Z]+\. \(a\)", p_tag.text.strip()) and re.search(r"^\(b\)", p_tag.find_next_sibling().text.strip()):
                         text_from_b = p_tag.text.split('(a)')
@@ -220,7 +219,7 @@ class RIParseHtml(ParseHtml, RegexPatterns):
                     if re.search(r'^Chapters? (?P<id>\d+(\.\d+)?(\.\d+)?([A-Z])?)', p_tag.text.strip()):
                         p_tag.name = "h2"
                 elif p_tag.get('class') == [self.tag_type_dict["head4"]]:
-                    if re.search(r'^Cross References\.\s+[a-zA-Z0-9]+|^Compiler’s Notes\.\s+[a-zA-Z0-9]+|^Definitional Cross References[.:]\s+[“a-z A-Z0-9]+', p_tag.text.strip()):
+                    if re.search(r'^Cross References\.\s+[a-zA-Z0-9]+|^Compiler’s Notes\.\s+[a-zA-Z0-9]+|^Definitional Cross References[.:]\s+[“a-z A-Z0-9]+', p_tag.text.strip()) and p_tag.b:
                         p_tag, new_tag = self.recreate_tag(p_tag)
                         new_tag.name = "h4"
                         header4_tag_text = re.sub(r'[\W.]+', '', new_tag.text.strip()).lower()
@@ -2351,18 +2350,19 @@ class RIParseHtml(ParseHtml, RegexPatterns):
             # class_name = tag['class'][0]
             # if tag.name == "p" and (class_name == self.tag_type_dict['history'] or class_name == self.tag_type_dict['ol_of_i'] or class_name == self.tag_type_dict['head4'] )and re.search(r'^[A-Za-z0-9]\.|^“?\([A-Z a-z0-9]+\)|^\([\w ]{4,}|^\. \. \.|^\[[A-Z a-z]+|^“?(\*\*)?[a-z A-Z]+|^\*“?[A-Za-z ]+|^_______________|^“?[a-z A-Z]+', tag.text.strip()) and not tag.has_attr('id') and not re.search('(Mass\.|U\.S\.|^Conn\.|N\.E\.|P.L. \d+|G\.\s?L\.|C\.I\.F\.|^[a-zA-Z0-9 ]+|R\.I\.|P\.S\.|G\.S\.|B\. Mitchell|Y\.M\.C\.A\.|A\.L\.R\.)', tag.text.strip()):
             #     print(tag)
-        # l=[]
+        # l = []
         # for tag in self.soup.main.find_all():
         #     if tag.has_attr('id') and tag['id'] not in l:
         #         l.append((tag['id']).lower())
         #     elif tag.has_attr('id') and tag['id'] in l:
-        #         print('duplicate:{0}', tag['id'])
+        #         print('duplicate:',tag['id'])
+
         # print(l)
         #     if tag.get('class') == [self.tag_type_dict["head4"]] and not tag.has_attr('id')and tag.b and not re.search(
         #             '^Mass\.|^Conn\.|P\.L\.|"^\([A-Za-z0-9]\)', tag.text.strip()):
         #         print(tag)
-        for tag in self.soup.main.find_all(["li","p"]):
-            if (tag.name == "li" and tag['class'] != "note") or (tag.name == "p" and tag['class'] == "text") :
+        for tag in self.soup.main.find_all(["li", "p"]):
+            if (tag.name == "li" and tag['class'] != "note") or (tag.name == "p" and tag['class'] == "text"):
                 del tag["class"]
 
         print('ol tags added')
@@ -2379,6 +2379,7 @@ class RIParseHtml(ParseHtml, RegexPatterns):
         super(RIParseHtml, self).replace_tags_constitution()
         note_to_decision_list: list = []
         note_to_decision_id: list = []
+        self.h4_cur_id_list: list = []
         h4_count = 1
         count = 1
         h5count = 1
@@ -2453,12 +2454,11 @@ class RIParseHtml(ParseHtml, RegexPatterns):
                         p_tag['id'] = f'{h4_tag_id}'
 
                     self.h4_cur_id_list.append(h4_tag_id)
-
             if p_tag.name == "p":
                 if p_tag.get("class") == [self.tag_type_dict["ul"]]:
                     p_tag.name = "li"
                     p_tag.wrap(self.ul_tag)
-                elif p_tag.get("class") == [self.tag_type_dict["head4"]]:
+                elif p_tag.get("class") == [self.tag_type_dict["head4"]] or p_tag.get("class") == [self.tag_type_dict["ol_of_i"]]:
                     if re.search(r"^History of Section\.", p_tag.text.strip()):
                         p_tag, new_tag = self.recreate_tag(p_tag)
                         new_tag.name = "h4"
